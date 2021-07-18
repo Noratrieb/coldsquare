@@ -1,5 +1,5 @@
 pub struct OperandStack {
-    vec: Vec<i32>,
+    vec: Vec<u32>,
 }
 
 impl OperandStack {
@@ -9,11 +9,11 @@ impl OperandStack {
         }
     }
 
-    pub fn pop(&mut self) -> i32 {
+    pub fn pop(&mut self) -> u32 {
         self.vec.pop().unwrap()
     }
 
-    pub fn push(&mut self, n: i32) {
+    pub fn push(&mut self, n: u32) {
         self.vec.push(n);
     }
 
@@ -24,7 +24,7 @@ impl OperandStack {
 }
 
 pub struct LocalVariables {
-    vec: Vec<i32>
+    vec: Vec<u32>
 }
 
 impl LocalVariables {
@@ -34,19 +34,19 @@ impl LocalVariables {
         }
     }
 
-    pub fn store(&mut self, address: u16, value: i32) {
+    pub fn store(&mut self, address: u8, value: u32) {
         self.vec.insert(address as usize, value);
     }
 
-    pub fn store2(&mut self, address: u16, value1: i32, value2: i32) {
+    pub fn store2(&mut self, address: u8, value1: u32, value2: u32) {
         self.vec.insert(address as usize, value1);
         self.vec.insert(address as usize + 1, value2);
     }
 
-    pub fn load(&self, address: u16) -> i32 {
+    pub fn load(&self, address: u8) -> u32 {
         self.vec[address as usize]
     }
-    pub fn load2(&self, address: u16) -> (i32, i32) {
+    pub fn load2(&self, address: u8) -> (u32, u32) {
         (self.vec[address as usize], self.vec[address as usize + 1])
     }
 
