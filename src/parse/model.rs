@@ -14,44 +14,46 @@ pub type u4 = u32;
 ///
 /// # Represents a .class file
 ///
+#[derive(Debug, Clone, Hash)]
 pub struct ClassFile {
     /// Magic number identifying the format (= 0xCAFEBABE)
-    pub(crate) magic: u4,
+    pub magic: u4,
     /// The version of the class file (.X)
-    pub(crate) minor_version: u2,
+    pub minor_version: u2,
     /// The version of the class file (X.)
-    pub(crate) major_version: u2,
+    pub major_version: u2,
     /// Number of entries in the constant pool + 1
-    pub(crate) constant_pool_count: u2,
+    pub constant_pool_count: u2,
     /// The constant pool. Indexed from 1 to constant_pool_count - 1
-    pub(crate) constant_pool: Vec<CpInfo>,
+    pub constant_pool: Vec<CpInfo>,
     /// Mask of `ClassAccessFlag` used to denote access permissions
-    pub(crate) access_flags: u2,
+    pub access_flags: u2,
     /// A valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
-    pub(crate) this_class: u2,
+    pub this_class: u2,
     /// Zero or a valid index into the `constant_pool` table
-    pub(crate) super_class: u2,
+    pub super_class: u2,
     /// The number if direct superinterfaces of this class or interface type
-    pub(crate) interfaces_count: u2,
+    pub interfaces_count: u2,
     /// Each entry must be a valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
-    pub(crate) interfaces: Vec<u2>,
+    pub interfaces: Vec<u2>,
     /// The number of fields in the `fields` table
-    pub(crate) fields_count: u2,
+    pub fields_count: u2,
     /// All fields of the class. Contains only fields of the class itself
-    pub(crate) fields: Vec<FieldInfo>,
+    pub fields: Vec<FieldInfo>,
     /// The number of methods in `methods`
-    pub(crate) method_count: u2,
+    pub method_count: u2,
     /// All methods of the class. If it's neither Native nor Abstract, the implementation has to be provided too
-    pub(crate) methods: Vec<MethodInfo>,
+    pub methods: Vec<MethodInfo>,
     /// The number of attributes in `attributes`
-    pub(crate) attributes_count: u2,
+    pub attributes_count: u2,
     /// All attributes of the class
-    pub(crate) attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
 }
 
 /// A constant from the constant pool
 /// May have indices back to the constant pool, with expected types
 /// _index: A valid index into the `constant_pool` table.
+#[derive(Debug, Clone, Hash)]
 pub enum CpInfo {
     Class {
         tag: u1, // 7
@@ -139,7 +141,7 @@ pub enum CpInfo {
         descriptor_index: u2,
     },
     InvokeDynamic {
-        tag: u1,
+        tag: u1, // 18
         /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class fiel
         bootstrap_method_attr_index: u2,
         /// Entry must `NameAndType`
@@ -148,26 +150,36 @@ pub enum CpInfo {
 }
 
 /// Information about a field
+#[derive(Debug, Clone, Hash)]
 pub struct FieldInfo {
-    access_flags: u2,
-    name_index: u2,
-    descriptor_index: u2,
-    attributes_count: u2,
-    attributes: Vec<AttributeInfo>,
+    pub access_flags: u2,
+    pub name_index: u2,
+    pub descriptor_index: u2,
+    pub attributes_count: u2,
+    pub attributes: Vec<Attribute>,
 }
 
 /// Information about a method
+#[derive(Debug, Clone, Hash)]
 pub struct MethodInfo {
     /// Mask of `MethodAccessFlag` used to denote access permissions
-    access_flags: u2,
+    pub access_flags: u2,
     /// Index to the `constant_pool` of the method name, must be `Utf8`
-    name_index: u2,
+    pub name_index: u2,
     /// Index to the `constant_pool` of the method descriptor, must be `Utf8`
-    descriptor_index: u2,
+    pub descriptor_index: u2,
     /// The amount of attributes for this method
-    attributes_count: u2,
+    pub attributes_count: u2,
     /// The attributes for this method
-    attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
+}
+
+/// See `AttributeInfo`
+#[derive(Debug, Clone, Hash)]
+pub struct Attribute {
+    pub attribute_name_index: u2,
+    pub attribute_length: u4,
+    pub attribute_content: Vec<u1>,
 }
 
 /// Information about an attribute
@@ -176,6 +188,8 @@ pub struct MethodInfo {
 /// `attribute_length`: The length of the subsequent bytes, does not include the first 6
 ///
 /// _index: Index to the `constant_pool` table of any type
+#[derive(Debug, Clone, Hash)]
+#[allow(dead_code)] // todo yeah lol
 pub enum AttributeInfo {
     /// Only on fields, the constant value of that field
     ConstantValue {
@@ -202,7 +216,7 @@ pub enum AttributeInfo {
         exception_table: Vec<AttributeCodeException>,
         attributes_count: u2,
         /// The attributes of the code
-        attributes: Vec<AttributeInfo>,
+        attributes: Vec<Attribute>,
     },
     /// Only on the `Code` attribute, used for verification
     /// May be implicit on version >= 50.0, with no entries
@@ -336,22 +350,24 @@ pub enum AttributeInfo {
 }
 
 /// An exception handler in the JVM bytecode array
+#[derive(Debug, Clone, Hash)]
 pub struct AttributeCodeException {
     /// The ranges in the code in which the handler is active. Must be a valid index into the code array.
     /// The `start_pc` is inclusive
-    start_pc: u2,
+    pub start_pc: u2,
     /// The ranges in the code in which the handler is active. Must be a valid index into the code array or the length.
     /// The `end_pc` is exclusive
-    end_pc: u2,
+    pub end_pc: u2,
     /// The start of the exception handler, must be a valid index into the code array at an opcode instruction
-    handler_pc: u2,
+    pub handler_pc: u2,
     /// If the catch type is nonzero, it must be a valid index into the `constant_pool`, must be a `Class`
     /// Zero means it catches all Exceptions, this is usually for `finally`
-    catch_type: u2,
+    pub catch_type: u2,
 }
 
 /// Specifies the type state at a particular bytecode offset
 /// Has a offset_delta, the offset is calculated by adding offset_delta + 1 to the previous offset
+#[derive(Debug, Clone, Hash)]
 pub enum StackMapFrame {
     /// Exactly the same locals as the previous frame and zero stack items, offset_delta is frame_type
     SameFrame {
@@ -364,7 +380,7 @@ pub enum StackMapFrame {
     },
     /// Exactly the same locals as the previous frame and 1 stack item, offset_delta is given explicitly
     SameLocals1StackItemFrameExtended {
-        frame_type: u1, // 257
+        frame_type: u1, // 247
         offset_delta: u2,
         stack: VerificationTypeInfo,
     },
@@ -397,6 +413,7 @@ pub enum StackMapFrame {
 }
 
 /// A stack value/local variable type `StackMapFrame`
+#[derive(Debug, Clone, Hash)]
 pub enum VerificationTypeInfo {
     Top {
         tag: u1, // 0
@@ -431,64 +448,71 @@ pub enum VerificationTypeInfo {
 }
 
 /// A struct for the `AttributeInfo::InnerClasses`
+#[derive(Debug, Clone, Hash)]
 pub struct AttributeInnerClass {
     /// Must be a `Class`
-    inner_class_info_index: u2,
+    pub inner_class_info_index: u2,
     /// Must be 0 or a `Class`
-    outer_class_info_index: u2,
+    pub outer_class_info_index: u2,
     /// Must be 0 or `Utf8`
-    inner_class_name_index: u2,
+    pub inner_class_name_index: u2,
     /// Must be a mask of `InnerClassAccessFlags`
-    inner_class_access_flags: u2,
+    pub inner_class_access_flags: u2,
 }
 
 /// Line number information for `AttributeInfo::LineNumberTable`
+#[derive(Debug, Clone, Hash)]
 pub struct AttributeLineNumber {
     /// Index into the code array where a new line in the source begins
-    start_pc: u2,
+    pub start_pc: u2,
     /// The line number in the source file
-    line_number: u2,
+    pub line_number: u2,
 }
 
 /// Local variable information for `AttributeInfo::LocalVariableTable` and `AttributeInfo::LocalVariableTypeTable`
+#[derive(Debug, Clone, Hash)]
 pub struct AttributeLocalVariableTable {
     /// The local variable must have a value between `start_pc` and `start_pc + length`. Must be a valid opcode
-    start_pc: u2,
+    pub start_pc: u2,
     /// The local variable must have a value between `start_pc` and `start_pc + length`
-    length: u2,
+    pub length: u2,
     /// Must be `Utf8`
-    name_index: u2,
+    pub name_index: u2,
     /// Must be `Utf8`, field descriptor or field signature encoding the type
-    descriptor_or_signature_index: u2,
+    pub descriptor_or_signature_index: u2,
     /// The variable must be at `index` in the local variable array
-    index: u2,
+    pub index: u2,
 }
 
 /// A runtime-visible annotation to the program
+#[derive(Debug, Clone, Hash)]
 pub struct Annotation {
     /// Must be `Utf8`
-    type_index: u2,
-    num_element_value_pairs: u2,
-    element_value_pairs: Vec<AnnotationElementValuePair>,
+    pub type_index: u2,
+    pub num_element_value_pairs: u2,
+    pub element_value_pairs: Vec<AnnotationElementValuePair>,
 }
 
 // these type names have just become java at this point. no shame.
 
 /// A element-value pair in the `Annotation`
+#[derive(Debug, Clone, Hash)]
 pub struct AnnotationElementValuePair {
     /// Must be `Utf8`
-    element_name_index: u2,
-    element_name_name: AnnotationElementValue,
+    pub element_name_index: u2,
+    pub element_name_name: AnnotationElementValue,
 }
 
 /// The value of an `AnnotationElementValuePair`
+#[derive(Debug, Clone, Hash)]
 pub struct AnnotationElementValue {
     /// B, C, D, F, I, J, S, Z or s, e, c, @,
-    tag: u1,
-    value: AnnotationElementValueValue,
+    pub tag: u1,
+    pub value: AnnotationElementValueValue,
 }
 
 /// The value of a `AnnotationElementValue`
+#[derive(Debug, Clone, Hash)]
 pub enum AnnotationElementValueValue {
     /// If the tag is B, C, D, F, I, J, S, Z, or s.
     ConstValueIndex {
@@ -520,24 +544,27 @@ pub enum AnnotationElementValueValue {
 }
 
 /// Used in `AttributeInfo::RuntimeVisibleParameterAnnotations`
+#[derive(Debug, Clone, Hash)]
 pub struct ParameterAnnotation {
-    num_annotations: u2,
-    annotations: Vec<Annotation>,
+    pub num_annotations: u2,
+    pub annotations: Vec<Annotation>,
 }
 
 /// Used in `AttributeInfo::BootstrapMethods `
+#[derive(Debug, Clone, Hash)]
 pub struct BootstrapMethod {
     /// Must be a `MethodHandle`
-    bootstrap_method_ref: u2,
-    num_bootstrap_arguments: u2,
+    pub bootstrap_method_ref: u2,
+    pub num_bootstrap_arguments: u2,
     /// Each argument is a cpool entry. The constants must be `String, Class, Integer, Long, Float, Double, MethodHandle, or MethodType`
-    bootstrap_arguments: Vec<u2>,
+    pub bootstrap_arguments: Vec<u2>,
 }
 
 /////// Access Flags
 
 /// Access Flags of a class
 #[repr(u16)]
+#[derive(Debug, Clone, Hash)]
 pub enum ClassAccessFlag {
     /// Declared public; may be accessed from outside its package.
     Public = 0x0001,
@@ -559,6 +586,7 @@ pub enum ClassAccessFlag {
 
 /// Access Flags of a method
 #[repr(u16)]
+#[derive(Debug, Clone, Hash)]
 pub enum MethodAccessFlag {
     //	Declared public; may be accessed from outside its package.
     PUBLIC = 0x0001,
@@ -588,6 +616,7 @@ pub enum MethodAccessFlag {
 
 /// Access flags for an inner class
 #[repr(u16)]
+#[derive(Debug, Clone, Hash)]
 pub enum InnerClassAccessFlags {
     ///	Marked or implicitly public in source.
     PUBLIC = 0x0001,
@@ -613,6 +642,7 @@ pub enum InnerClassAccessFlags {
 
 /// Access flags for a field
 #[repr(u16)]
+#[derive(Debug, Clone, Hash)]
 pub enum FieldAccessFlags {
     ///	Declared public; may be accessed from outside its package.
     PUBLIC = 0x0001,

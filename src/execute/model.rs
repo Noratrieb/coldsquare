@@ -4,9 +4,7 @@ pub struct OperandStack {
 
 impl OperandStack {
     pub fn new() -> OperandStack {
-        OperandStack {
-            vec: vec![],
-        }
+        OperandStack { vec: vec![] }
     }
 
     pub fn pop(&mut self) -> u32 {
@@ -19,19 +17,17 @@ impl OperandStack {
 
     pub fn swap(&mut self) {
         let len = self.vec.len();
-        self.vec.swap(len- 1, len - 2);
+        self.vec.swap(len - 1, len - 2);
     }
 }
 
 pub struct LocalVariables {
-    vec: Vec<u32>
+    vec: Vec<u32>,
 }
 
 impl LocalVariables {
     pub fn new(size: usize) -> LocalVariables {
-        LocalVariables {
-            vec: vec![0; size]
-        }
+        LocalVariables { vec: vec![0; size] }
     }
 
     pub fn store(&mut self, address: u8, value: u32) {
@@ -49,12 +45,11 @@ impl LocalVariables {
     pub fn load2(&self, address: u8) -> (u32, u32) {
         (self.vec[address as usize], self.vec[address as usize + 1])
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{LocalVariables, OperandStack};
+    use crate::execute::model::{LocalVariables, OperandStack};
 
     #[test]
     fn operand_stack() {
