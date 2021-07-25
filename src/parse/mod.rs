@@ -3,7 +3,7 @@ pub use model::*;
 use std::path::Prefix::Verbatim;
 
 #[derive(Debug)]
-pub struct ParseErr;
+pub struct ParseErr(String);
 
 pub type Result<T> = std::result::Result<T, ParseErr>;
 
@@ -27,7 +27,7 @@ impl Data {
     fn u1(&mut self) -> Result<u1> {
         let item = self.data.get(self.pointer).cloned();
         self.pointer += 1;
-        item.ok_or(ParseErr)
+        item.ok_or(ParseErr("No u1 left".to_string()))
     }
 
     fn u2(&mut self) -> Result<u2> {
@@ -39,17 +39,32 @@ impl Data {
     }
 
     fn last_u1(&self) -> Result<u1> {
-        self.data.get(self.pointer - 1).cloned().ok_or(ParseErr)
+        self.data
+            .get(self.pointer - 1)
+            .cloned()
+            .ok_or(ParseErr("Last u1 not found".to_string()))
     }
 
     fn last_u2(&self) -> Result<u2> {
-        let last2u1 = self.data.get(self.pointer - 2).cloned().ok_or(ParseErr)?;
+        let last2u1 = self
+            .data
+            .get(self.pointer - 2)
+            .cloned()
+            .ok_or(ParseErr("Last u2 not found".to_string()))?;
         Ok(((last2u1 as u2) << 8) | self.last_u1()? as u2)
     }
 
     fn last_u4(&self) -> Result<u4> {
-        let last2u1 = self.data.get(self.pointer - 3).cloned().ok_or(ParseErr)?;
-        let last3u1 = self.data.get(self.pointer - 4).cloned().ok_or(ParseErr)?;
+        let last2u1 = self
+            .data
+            .get(self.pointer - 3)
+            .cloned()
+            .ok_or(ParseErr("Last 2 u1 in last u4 not found".to_string()))?;
+        let last3u1 = self
+            .data
+            .get(self.pointer - 4)
+            .cloned()
+            .ok_or(ParseErr("Last 3 u1 in last u4 not found".to_string()))?;
         Ok(((last3u1 as u4) << 24) | ((last2u1 as u4) << 16) | self.last_u2()? as u4)
     }
 }
@@ -95,23 +110,41 @@ parse_primitive!(u4);
 
 impl Parse for ClassFile {
     fn parse(data: &mut Data) -> Result<Self> {
+        let magic = data.u4()?;
+        assert_eq!(magic, 0xCAFEBABE);
+        let minor_version = data.u2()?;
+        let major_version = data.u2()?;
+        let constant_pool_count = data.u2()?;
+        let constant_pool = Vec::parse_vec(data, constant_pool_count as usize)?;
+        let access_flags = data.u2()?;
+        let this_class = data.u2()?;
+        let super_class = data.u2()?;
+        let interfaces_count = data.u2()?;
+        let interfaces = Vec::parse_vec(data, interfaces_count as usize)?;
+        let fields_count = data.u2()?;
+        let fields = Vec::parse_vec(data, fields_count as usize)?;
+        let method_count = data.u2()?;
+        let methods = Vec::parse_vec(data, method_count as usize)?;
+        let attributes_count = data.u2()?;
+        let attributes = Vec::parse_vec(data, attributes_count as usize)?;
+        println!("los");
         Ok(Self {
-            magic: data.u4()?,
-            minor_version: data.u2()?,
-            major_version: data.u2()?,
-            constant_pool_count: data.u2()?,
-            constant_pool: Vec::parse_vec(data, data.last_u2()? as usize)?,
-            access_flags: data.u2()?,
-            this_class: data.u2()?,
-            super_class: data.u2()?,
-            interfaces_count: data.u2()?,
-            interfaces: Vec::parse_vec(data, data.last_u2()? as usize)?,
-            fields_count: data.u2()?,
-            fields: Vec::parse_vec(data, data.last_u2()? as usize)?,
-            method_count: data.u2()?,
-            methods: Vec::parse_vec(data, data.last_u2()? as usize)?,
-            attributes_count: data.u2()?,
-            attributes: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            magic,
+            minor_version,
+            major_version,
+            constant_pool_count,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces_count,
+            interfaces,
+            fields_count,
+            fields,
+            method_count,
+            methods,
+            attributes_count,
+            attributes,
         })
     }
 }
@@ -186,7 +219,7 @@ impl Parse for CpInfo {
                 bootstrap_method_attr_index: data.u2()?,
                 name_and_type_index: data.u2()?,
             },
-            _ => Err(ParseErr)?,
+            _ => Err(ParseErr(format!("Invalid CPInfo tag: {}", tag)))?,
         })
     }
 }
@@ -272,16 +305,16 @@ impl Parse for StackMapFrame {
                 number_of_stack_items: data.u2()?,
                 stack: Vec::parse_vec(data, data.last_u2()? as usize)?,
             },
-            _ => Err(ParseErr)?,
+            _ => Err(ParseErr(format!(
+                "Invalid StackMapFrame type: {}",
+                frame_type
+            )))?,
         })
     }
 }
 
 impl Parse for VerificationTypeInfo {
-    fn parse(data: &mut Data) -> Result<Self>
-    where
-        Self: Sized,
-    {
+    fn parse(data: &mut Data) -> Result<Self> {
         let tag = data.u1()?;
         Ok(match tag {
             0 => Self::Top { tag },
@@ -299,7 +332,10 @@ impl Parse for VerificationTypeInfo {
                 tag,
                 offset: data.u2()?,
             },
-            _ => Err(ParseErr)?,
+            _ => Err(ParseErr(format!(
+                "Invalid VerificationTypeInfo tag: {}",
+                tag
+            )))?,
         })
     }
 }
@@ -383,7 +419,10 @@ impl Parse for AnnotationElementValueValue {
                 num_values: data.u2()?,
                 values: Vec::parse_vec(data, data.last_u2()? as usize)?,
             },
-            _ => Err(ParseErr)?,
+            _ => Err(ParseErr(format!(
+                "Invalid AnnotationElementValueValue tag: {}",
+                tag
+            )))?,
         })
     }
 }
