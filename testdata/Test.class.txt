@@ -25,7 +25,7 @@ Cp: [
     1: {
         tag: 0a (10, MethodRef)
         class_index: 00 02 (2)
-        name_and_type_index: 00 03 (2)
+        name_and_type_index: 00 03
     }
     2: {
         tag: 07 (7, Class)
@@ -34,7 +34,7 @@ Cp: [
     3: {
         tag: 0c (12, NameAndType)
         name_index: 00 05 (05)
-        descriptor_index: 00 06 (6)
+        descriptor_index: 00 06
     }
     4: {
         tag: 01 (1, Utf8)

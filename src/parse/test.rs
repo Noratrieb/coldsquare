@@ -38,7 +38,6 @@ fn data_u4() {
 #[test]
 fn parse_empty_class() {
     let class = include_bytes!("../../testdata/Test.class");
-    println!("Starting test...");
     let parsed = parse_class_file(class).unwrap();
 
     assert_eq!(parsed.minor_version, 0);
@@ -70,7 +69,7 @@ fn parse_empty_class() {
             CpInfo::Utf8 {
                 tag: 1,
                 length: 6,
-                bytes: "init".bytes().collect()
+                bytes: "<init>".bytes().collect()
             },
             CpInfo::Utf8 {
                 tag: 1,
@@ -122,4 +121,11 @@ fn parse_empty_class() {
     assert_eq!(parsed.methods[0].attributes_count, 1);
     assert_eq!(parsed.methods[0].attributes[0].attribute_name_index, 9);
     assert_eq!(parsed.methods[0].attributes[0].attribute_length, 0x1d);
+}
+
+#[test]
+fn more_complex_file() {
+    let class = include_bytes!("../../testdata/Test2.class");
+    let parsed = parse_class_file(class).unwrap();
+    assert_eq!(parsed.magic, 0xCAFEBABE);
 }

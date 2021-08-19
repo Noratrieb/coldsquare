@@ -9,15 +9,15 @@ pub struct ParseErr(String);
 
 pub type Result<T> = std::result::Result<T, ParseErr>;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 struct Data<'a> {
     data: &'a [u1],
     pointer: usize,
 }
 
 pub fn parse_class_file(data: &[u1]) -> Result<ClassFile> {
-    let data = Data { data, pointer: 0 };
-    ClassFile::parse(data)
+    let mut data = Data { data, pointer: 0 };
+    ClassFile::parse(&mut data)
 }
 
 impl<'a> Data<'a> {
@@ -67,12 +67,12 @@ impl<'a> Data<'a> {
 }
 
 trait Parse {
-    fn parse(data: Data) -> Result<Self>
+    fn parse(data: &mut Data) -> Result<Self>
     where
         Self: Sized;
 }
 
-fn parse_vec<T: Parse, S: Into<usize>>(data: Data, len: S) -> Result<Vec<T>> {
+fn parse_vec<T: Parse, S: Into<usize>>(data: &mut Data, len: S) -> Result<Vec<T>> {
     let len = len.into();
     let mut vec = Vec::with_capacity(len);
     for _ in 0..len {
@@ -84,7 +84,7 @@ fn parse_vec<T: Parse, S: Into<usize>>(data: Data, len: S) -> Result<Vec<T>> {
 macro_rules! parse_primitive {
     ($($value:ident),*) => {
         $(impl Parse for $value {
-            fn parse(mut data: Data) -> Result<Self>
+            fn parse(data: &mut Data) -> Result<Self>
             where
                 Self: Sized,
             {
@@ -97,7 +97,7 @@ macro_rules! parse_primitive {
 parse_primitive!(u1, u2, u4);
 
 impl Parse for ClassFile {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         let magic = data.u4()?;
         assert_eq!(magic, 0xCAFEBABE);
         let minor_version = data.u2()?;
@@ -115,6 +115,7 @@ impl Parse for ClassFile {
         let methods = parse_vec(data, method_count)?;
         let attributes_count = data.u2()?;
         let attributes = parse_vec(data, attributes_count)?;
+
         Ok(Self {
             magic,
             minor_version,
@@ -137,7 +138,7 @@ impl Parse for ClassFile {
 }
 
 impl Parse for CpInfo {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         let tag = data.u1()?;
 
         Ok(match tag {
@@ -212,7 +213,7 @@ impl Parse for CpInfo {
 }
 
 impl Parse for FieldInfo {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
             name_index: data.u2()?,
@@ -224,7 +225,7 @@ impl Parse for FieldInfo {
 }
 
 impl Parse for MethodInfo {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
             name_index: data.u2()?,
@@ -236,7 +237,7 @@ impl Parse for MethodInfo {
 }
 
 impl Parse for Attribute {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             attribute_name_index: data.u2()?,
             attribute_length: data.u4()?,
@@ -246,7 +247,7 @@ impl Parse for Attribute {
 }
 
 impl Parse for AttributeCodeException {
-    fn parse(data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.last_u2()?,
             end_pc: data.last_u2()?,
@@ -257,7 +258,7 @@ impl Parse for AttributeCodeException {
 }
 
 impl Parse for StackMapFrame {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         let frame_type = data.u1()?;
 
         Ok(match frame_type {
@@ -301,7 +302,7 @@ impl Parse for StackMapFrame {
 }
 
 impl Parse for VerificationTypeInfo {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         let tag = data.u1()?;
         Ok(match tag {
             0 => Self::Top { tag },
@@ -328,7 +329,7 @@ impl Parse for VerificationTypeInfo {
 }
 
 impl Parse for AttributeInnerClass {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             inner_class_info_index: data.u2()?,
             outer_class_info_index: data.u2()?,
@@ -339,7 +340,7 @@ impl Parse for AttributeInnerClass {
 }
 
 impl Parse for AttributeLineNumber {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             line_number: data.u2()?,
@@ -348,7 +349,7 @@ impl Parse for AttributeLineNumber {
 }
 
 impl Parse for AttributeLocalVariableTable {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             length: data.u2()?,
@@ -360,7 +361,7 @@ impl Parse for AttributeLocalVariableTable {
 }
 
 impl Parse for Annotation {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             type_index: data.u2()?,
             num_element_value_pairs: data.u2()?,
@@ -370,7 +371,7 @@ impl Parse for Annotation {
 }
 
 impl Parse for AnnotationElementValuePair {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             element_name_index: data.u2()?,
             element_name_name: AnnotationElementValue::parse(data)?,
@@ -379,7 +380,7 @@ impl Parse for AnnotationElementValuePair {
 }
 
 impl Parse for AnnotationElementValue {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             tag: data.u1()?,
             value: AnnotationElementValueValue::parse(data)?,
@@ -388,7 +389,7 @@ impl Parse for AnnotationElementValue {
 }
 
 impl Parse for AnnotationElementValueValue {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         let tag = data.last_u1()? as char;
         Ok(match tag {
             'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' | 's' => {
@@ -415,7 +416,7 @@ impl Parse for AnnotationElementValueValue {
 }
 
 impl Parse for ParameterAnnotation {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             num_annotations: data.u2()?,
             annotations: parse_vec(data, data.last_u2()?)?,
@@ -424,7 +425,7 @@ impl Parse for ParameterAnnotation {
 }
 
 impl Parse for BootstrapMethod {
-    fn parse(mut data: Data) -> Result<Self> {
+    fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             bootstrap_method_ref: data.u2()?,
             num_bootstrap_arguments: data.u2()?,
