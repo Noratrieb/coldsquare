@@ -1,29 +1,26 @@
 mod model;
+#[cfg(test)]
+mod test;
+
 pub use model::*;
-use std::path::Prefix::Verbatim;
 
 #[derive(Debug)]
 pub struct ParseErr(String);
 
 pub type Result<T> = std::result::Result<T, ParseErr>;
 
-struct Data {
-    data: Vec<u1>,
+#[derive(Copy, Clone)]
+struct Data<'a> {
+    data: &'a [u1],
     pointer: usize,
 }
 
-pub fn parse_class_file(data: Vec<u1>) -> Result<ClassFile> {
-    let mut data = Data { data, pointer: 0 };
-    ClassFile::parse(&mut data)
+pub fn parse_class_file(data: &[u1]) -> Result<ClassFile> {
+    let data = Data { data, pointer: 0 };
+    ClassFile::parse(data)
 }
 
-impl From<Vec<u8>> for Data {
-    fn from(data: Vec<u1>) -> Self {
-        Self { data, pointer: 0 }
-    }
-}
-
-impl Data {
+impl<'a> Data<'a> {
     fn u1(&mut self) -> Result<u1> {
         let item = self.data.get(self.pointer).cloned();
         self.pointer += 1;
@@ -69,65 +66,55 @@ impl Data {
     }
 }
 
-pub trait Parse {
-    fn parse(data: &mut Data) -> Result<Self>
+trait Parse {
+    fn parse(data: Data) -> Result<Self>
     where
         Self: Sized;
 }
 
-pub trait ParseVec<T> {
-    fn parse_vec(data: &mut Data, len: usize) -> Result<Self>
-    where
-        Self: Sized;
-}
-
-impl<T: Parse> ParseVec<T> for Vec<T> {
-    fn parse_vec(data: &mut Data, len: usize) -> Result<Self> {
-        let mut vec = Vec::with_capacity(len);
-        for _ in 0..len {
-            vec.push(T::parse(data)?);
-        }
-        Ok(vec)
+fn parse_vec<T: Parse, S: Into<usize>>(data: Data, len: S) -> Result<Vec<T>> {
+    let len = len.into();
+    let mut vec = Vec::with_capacity(len);
+    for _ in 0..len {
+        vec.push(T::parse(data)?);
     }
+    Ok(vec)
 }
 
 macro_rules! parse_primitive {
-    ($value:ident) => {
-        impl Parse for $value {
-            fn parse(data: &mut Data) -> Result<Self>
+    ($($value:ident),*) => {
+        $(impl Parse for $value {
+            fn parse(mut data: Data) -> Result<Self>
             where
                 Self: Sized,
             {
                 data.$value()
             }
-        }
+        })*
     };
 }
 
-parse_primitive!(u1);
-parse_primitive!(u2);
-parse_primitive!(u4);
+parse_primitive!(u1, u2, u4);
 
 impl Parse for ClassFile {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         let magic = data.u4()?;
         assert_eq!(magic, 0xCAFEBABE);
         let minor_version = data.u2()?;
         let major_version = data.u2()?;
         let constant_pool_count = data.u2()?;
-        let constant_pool = Vec::parse_vec(data, constant_pool_count as usize)?;
+        let constant_pool = parse_vec(data, constant_pool_count - 1)?; // the minus one is important
         let access_flags = data.u2()?;
         let this_class = data.u2()?;
         let super_class = data.u2()?;
         let interfaces_count = data.u2()?;
-        let interfaces = Vec::parse_vec(data, interfaces_count as usize)?;
+        let interfaces = parse_vec(data, interfaces_count)?;
         let fields_count = data.u2()?;
-        let fields = Vec::parse_vec(data, fields_count as usize)?;
+        let fields = parse_vec(data, fields_count)?;
         let method_count = data.u2()?;
-        let methods = Vec::parse_vec(data, method_count as usize)?;
+        let methods = parse_vec(data, method_count)?;
         let attributes_count = data.u2()?;
-        let attributes = Vec::parse_vec(data, attributes_count as usize)?;
-        println!("los");
+        let attributes = parse_vec(data, attributes_count)?;
         Ok(Self {
             magic,
             minor_version,
@@ -150,7 +137,7 @@ impl Parse for ClassFile {
 }
 
 impl Parse for CpInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         let tag = data.u1()?;
 
         Ok(match tag {
@@ -163,7 +150,7 @@ impl Parse for CpInfo {
                 class_index: data.u2()?,
                 name_and_type_index: data.u2()?,
             },
-            10 => Self::Methodref {
+            10 => Self::MethodRef {
                 tag,
                 class_index: data.u2()?,
                 name_and_type_index: data.u2()?,
@@ -203,7 +190,7 @@ impl Parse for CpInfo {
             1 => Self::Utf8 {
                 tag,
                 length: data.u2()?,
-                bytes: Vec::parse_vec(data, data.last_u2()? as usize)?,
+                bytes: parse_vec(data, data.last_u2()?)?,
             },
             15 => Self::MethodHandle {
                 tag,
@@ -225,41 +212,41 @@ impl Parse for CpInfo {
 }
 
 impl Parse for FieldInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
             name_index: data.u2()?,
             descriptor_index: data.u2()?,
             attributes_count: data.u2()?,
-            attributes: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            attributes: parse_vec(data, data.last_u2()?)?,
         })
     }
 }
 
 impl Parse for MethodInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
             name_index: data.u2()?,
             descriptor_index: data.u2()?,
             attributes_count: data.u2()?,
-            attributes: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            attributes: parse_vec(data, data.last_u2()?)?,
         })
     }
 }
 
 impl Parse for Attribute {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             attribute_name_index: data.u2()?,
             attribute_length: data.u4()?,
-            attribute_content: Vec::parse_vec(data, data.last_u4()? as usize)?,
+            attribute_content: parse_vec(data, data.last_u4()? as usize)?,
         })
     }
 }
 
 impl Parse for AttributeCodeException {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.last_u2()?,
             end_pc: data.last_u2()?,
@@ -270,7 +257,7 @@ impl Parse for AttributeCodeException {
 }
 
 impl Parse for StackMapFrame {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         let frame_type = data.u1()?;
 
         Ok(match frame_type {
@@ -295,15 +282,15 @@ impl Parse for StackMapFrame {
             252..=254 => Self::AppendFrame {
                 frame_type,
                 offset_delta: data.u2()?,
-                locals: Vec::parse_vec(data, data.last_u2()? as usize)?,
+                locals: parse_vec(data, data.last_u2()?)?,
             },
             255 => Self::FullFrame {
                 frame_type,
                 offset_delta: data.u2()?,
                 number_of_locals: data.u2()?,
-                locals: Vec::parse_vec(data, data.last_u2()? as usize)?,
+                locals: parse_vec(data, data.last_u2()?)?,
                 number_of_stack_items: data.u2()?,
-                stack: Vec::parse_vec(data, data.last_u2()? as usize)?,
+                stack: parse_vec(data, data.last_u2()?)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid StackMapFrame type: {}",
@@ -314,7 +301,7 @@ impl Parse for StackMapFrame {
 }
 
 impl Parse for VerificationTypeInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         let tag = data.u1()?;
         Ok(match tag {
             0 => Self::Top { tag },
@@ -341,7 +328,7 @@ impl Parse for VerificationTypeInfo {
 }
 
 impl Parse for AttributeInnerClass {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             inner_class_info_index: data.u2()?,
             outer_class_info_index: data.u2()?,
@@ -352,7 +339,7 @@ impl Parse for AttributeInnerClass {
 }
 
 impl Parse for AttributeLineNumber {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             line_number: data.u2()?,
@@ -361,7 +348,7 @@ impl Parse for AttributeLineNumber {
 }
 
 impl Parse for AttributeLocalVariableTable {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             length: data.u2()?,
@@ -373,17 +360,17 @@ impl Parse for AttributeLocalVariableTable {
 }
 
 impl Parse for Annotation {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             type_index: data.u2()?,
             num_element_value_pairs: data.u2()?,
-            element_value_pairs: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            element_value_pairs: parse_vec(data, data.last_u2()?)?,
         })
     }
 }
 
 impl Parse for AnnotationElementValuePair {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             element_name_index: data.u2()?,
             element_name_name: AnnotationElementValue::parse(data)?,
@@ -392,7 +379,7 @@ impl Parse for AnnotationElementValuePair {
 }
 
 impl Parse for AnnotationElementValue {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             tag: data.u1()?,
             value: AnnotationElementValueValue::parse(data)?,
@@ -401,7 +388,7 @@ impl Parse for AnnotationElementValue {
 }
 
 impl Parse for AnnotationElementValueValue {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         let tag = data.last_u1()? as char;
         Ok(match tag {
             'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' | 's' => {
@@ -417,7 +404,7 @@ impl Parse for AnnotationElementValueValue {
             },
             '[' => Self::ArrayValue {
                 num_values: data.u2()?,
-                values: Vec::parse_vec(data, data.last_u2()? as usize)?,
+                values: parse_vec(data, data.last_u2()?)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid AnnotationElementValueValue tag: {}",
@@ -428,57 +415,20 @@ impl Parse for AnnotationElementValueValue {
 }
 
 impl Parse for ParameterAnnotation {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             num_annotations: data.u2()?,
-            annotations: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            annotations: parse_vec(data, data.last_u2()?)?,
         })
     }
 }
 
 impl Parse for BootstrapMethod {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(mut data: Data) -> Result<Self> {
         Ok(Self {
             bootstrap_method_ref: data.u2()?,
             num_bootstrap_arguments: data.u2()?,
-            bootstrap_arguments: Vec::parse_vec(data, data.last_u2()? as usize)?,
+            bootstrap_arguments: parse_vec(data, data.last_u2()?)?,
         })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::parse::Data;
-
-    #[test]
-    fn data_u1() {
-        let mut data = Data {
-            data: vec![0xff, 0x00],
-            pointer: 0,
-        };
-        assert_eq!(data.u1().unwrap(), 0xff);
-        assert_eq!(data.u1().unwrap(), 0x00);
-        assert_eq!(data.last_u1().unwrap(), 0x00);
-    }
-
-    #[test]
-    fn data_u2() {
-        let mut data = Data {
-            data: vec![0xff, 0x33, 0x11, 0x00],
-            pointer: 0,
-        };
-        assert_eq!(data.u2().unwrap(), 0xff33);
-        assert_eq!(data.u2().unwrap(), 0x1100);
-        assert_eq!(data.last_u2().unwrap(), 0x1100);
-    }
-
-    #[test]
-    fn data_u4() {
-        let mut data = Data {
-            data: vec![0xff, 0x33, 0x11, 0x00],
-            pointer: 0,
-        };
-        assert_eq!(data.u4().unwrap(), 0xff331100);
-        assert_eq!(data.last_u4().unwrap(), 0xff331100);
     }
 }

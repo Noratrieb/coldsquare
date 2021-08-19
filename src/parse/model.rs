@@ -2,6 +2,7 @@
 //! The models for a .class file
 //!
 //! [The .class specs](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html)
+#![allow(dead_code)]
 
 // The types used in the specs
 #[allow(non_camel_case_types)]
@@ -14,7 +15,7 @@ pub type u4 = u32;
 ///
 /// # Represents a .class file
 ///
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ClassFile {
     /// Magic number identifying the format (= 0xCAFEBABE)
     pub magic: u4,
@@ -53,7 +54,7 @@ pub struct ClassFile {
 /// A constant from the constant pool
 /// May have indices back to the constant pool, with expected types
 /// _index: A valid index into the `constant_pool` table.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum CpInfo {
     Class {
         tag: u1, // 7
@@ -67,7 +68,7 @@ pub enum CpInfo {
         /// Entry must be `NameAndType`
         name_and_type_index: u2,
     },
-    Methodref {
+    MethodRef {
         tag: u1, // 10
         /// Must be a class type
         class_index: u2,
@@ -150,7 +151,7 @@ pub enum CpInfo {
 }
 
 /// Information about a field
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FieldInfo {
     pub access_flags: u2,
     pub name_index: u2,
@@ -160,7 +161,7 @@ pub struct FieldInfo {
 }
 
 /// Information about a method
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MethodInfo {
     /// Mask of `MethodAccessFlag` used to denote access permissions
     pub access_flags: u2,
@@ -175,7 +176,7 @@ pub struct MethodInfo {
 }
 
 /// See `AttributeInfo`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Attribute {
     pub attribute_name_index: u2,
     pub attribute_length: u4,
@@ -188,7 +189,7 @@ pub struct Attribute {
 /// `attribute_length`: The length of the subsequent bytes, does not include the first 6
 ///
 /// _index: Index to the `constant_pool` table of any type
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[allow(dead_code)] // todo yeah lol
 pub enum AttributeInfo {
     /// Only on fields, the constant value of that field
@@ -350,7 +351,7 @@ pub enum AttributeInfo {
 }
 
 /// An exception handler in the JVM bytecode array
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeCodeException {
     /// The ranges in the code in which the handler is active. Must be a valid index into the code array.
     /// The `start_pc` is inclusive
@@ -367,7 +368,7 @@ pub struct AttributeCodeException {
 
 /// Specifies the type state at a particular bytecode offset
 /// Has a offset_delta, the offset is calculated by adding offset_delta + 1 to the previous offset
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum StackMapFrame {
     /// Exactly the same locals as the previous frame and zero stack items, offset_delta is frame_type
     SameFrame {
@@ -413,7 +414,7 @@ pub enum StackMapFrame {
 }
 
 /// A stack value/local variable type `StackMapFrame`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum VerificationTypeInfo {
     Top {
         tag: u1, // 0
@@ -448,7 +449,7 @@ pub enum VerificationTypeInfo {
 }
 
 /// A struct for the `AttributeInfo::InnerClasses`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeInnerClass {
     /// Must be a `Class`
     pub inner_class_info_index: u2,
@@ -461,7 +462,7 @@ pub struct AttributeInnerClass {
 }
 
 /// Line number information for `AttributeInfo::LineNumberTable`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeLineNumber {
     /// Index into the code array where a new line in the source begins
     pub start_pc: u2,
@@ -470,7 +471,7 @@ pub struct AttributeLineNumber {
 }
 
 /// Local variable information for `AttributeInfo::LocalVariableTable` and `AttributeInfo::LocalVariableTypeTable`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeLocalVariableTable {
     /// The local variable must have a value between `start_pc` and `start_pc + length`. Must be a valid opcode
     pub start_pc: u2,
@@ -485,7 +486,7 @@ pub struct AttributeLocalVariableTable {
 }
 
 /// A runtime-visible annotation to the program
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Annotation {
     /// Must be `Utf8`
     pub type_index: u2,
@@ -496,7 +497,7 @@ pub struct Annotation {
 // these type names have just become java at this point. no shame.
 
 /// A element-value pair in the `Annotation`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AnnotationElementValuePair {
     /// Must be `Utf8`
     pub element_name_index: u2,
@@ -504,7 +505,7 @@ pub struct AnnotationElementValuePair {
 }
 
 /// The value of an `AnnotationElementValuePair`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AnnotationElementValue {
     /// B, C, D, F, I, J, S, Z or s, e, c, @,
     pub tag: u1,
@@ -512,7 +513,7 @@ pub struct AnnotationElementValue {
 }
 
 /// The value of a `AnnotationElementValue`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum AnnotationElementValueValue {
     /// If the tag is B, C, D, F, I, J, S, Z, or s.
     ConstValueIndex {
@@ -544,14 +545,14 @@ pub enum AnnotationElementValueValue {
 }
 
 /// Used in `AttributeInfo::RuntimeVisibleParameterAnnotations`
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ParameterAnnotation {
     pub num_annotations: u2,
     pub annotations: Vec<Annotation>,
 }
 
 /// Used in `AttributeInfo::BootstrapMethods `
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BootstrapMethod {
     /// Must be a `MethodHandle`
     pub bootstrap_method_ref: u2,
@@ -564,7 +565,7 @@ pub struct BootstrapMethod {
 
 /// Access Flags of a class
 #[repr(u16)]
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum ClassAccessFlag {
     /// Declared public; may be accessed from outside its package.
     Public = 0x0001,
@@ -586,7 +587,7 @@ pub enum ClassAccessFlag {
 
 /// Access Flags of a method
 #[repr(u16)]
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum MethodAccessFlag {
     //	Declared public; may be accessed from outside its package.
     PUBLIC = 0x0001,
@@ -616,7 +617,7 @@ pub enum MethodAccessFlag {
 
 /// Access flags for an inner class
 #[repr(u16)]
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum InnerClassAccessFlags {
     ///	Marked or implicitly public in source.
     PUBLIC = 0x0001,
@@ -642,7 +643,7 @@ pub enum InnerClassAccessFlags {
 
 /// Access flags for a field
 #[repr(u16)]
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum FieldAccessFlags {
     ///	Declared public; may be accessed from outside its package.
     PUBLIC = 0x0001,
