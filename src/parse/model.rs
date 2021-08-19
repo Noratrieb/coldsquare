@@ -48,7 +48,7 @@ pub struct ClassFile {
     /// The number of attributes in `attributes`
     pub attributes_count: u2,
     /// All attributes of the class
-    pub attributes: Vec<Attribute>,
+    pub attributes: Vec<AttributeInfo>,
 }
 
 /// A constant from the constant pool
@@ -126,7 +126,7 @@ pub enum CpInfo {
         /// The length of the String. Not null-terminated.
         length: u2,
         /// Contains modified UTF-8
-        bytes: Vec<u1>,
+        bytes: String,
     },
     MethodHandle {
         tag: u1, // 15
@@ -157,7 +157,7 @@ pub struct FieldInfo {
     pub name_index: u2,
     pub descriptor_index: u2,
     pub attributes_count: u2,
-    pub attributes: Vec<Attribute>,
+    pub attributes: Vec<AttributeInfo>,
 }
 
 /// Information about a method
@@ -172,15 +172,7 @@ pub struct MethodInfo {
     /// The amount of attributes for this method
     pub attributes_count: u2,
     /// The attributes for this method
-    pub attributes: Vec<Attribute>,
-}
-
-/// See `AttributeInfo`
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct Attribute {
-    pub attribute_name_index: u2,
-    pub attribute_length: u4,
-    pub attribute_content: Vec<u1>,
+    pub attributes: Vec<AttributeInfo>,
 }
 
 /// Information about an attribute
@@ -190,8 +182,15 @@ pub struct Attribute {
 ///
 /// _index: Index to the `constant_pool` table of any type
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(dead_code)] // todo yeah lol
+// todo refactor this into a struct + enum
 pub enum AttributeInfo {
+    __Empty,
+    /// The exact kind of attribute is not known yet and will be resolved later in the process
+    Unknown {
+        attribute_name_index: u2,
+        attribute_length: u4,
+        attribute_content: Vec<u1>,
+    },
     /// Only on fields, the constant value of that field
     ConstantValue {
         attribute_name_index: u2, // "ConstantValue"
@@ -217,7 +216,7 @@ pub enum AttributeInfo {
         exception_table: Vec<AttributeCodeException>,
         attributes_count: u2,
         /// The attributes of the code
-        attributes: Vec<Attribute>,
+        attributes: Vec<AttributeInfo>,
     },
     /// Only on the `Code` attribute, used for verification
     /// May be implicit on version >= 50.0, with no entries
