@@ -182,26 +182,28 @@ pub struct MethodInfo {
 ///
 /// _index: Index to the `constant_pool` table of any type
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-// todo refactor this into a struct + enum
-pub enum AttributeInfo {
+pub struct AttributeInfo {
+    pub attribute_name_index: u2,
+    pub attribute_length: u4,
+    /// The attribute value
+    pub inner: AttributeInfoInner,
+}
+
+/// The Attributes, without the two common fields
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum AttributeInfoInner {
     __Empty,
     /// The exact kind of attribute is not known yet and will be resolved later in the process
     Unknown {
-        attribute_name_index: u2,
-        attribute_length: u4,
         attribute_content: Vec<u1>,
     },
     /// Only on fields, the constant value of that field
     ConstantValue {
-        attribute_name_index: u2, // "ConstantValue"
-        attribute_length: u4,
         /// Must be of type `Long`/`Float`/`Double`/`Integer`/`String`
         constantvalue_index: u2,
     },
     /// Only on methods, contains JVM instructions and auxiliary information for a single method
     Code {
-        attribute_name_index: u2,
-        attribute_length: u4,
         /// The maximum depth of the operand stack for this method
         max_stack: u2,
         /// The number of the local variables array, including the parameters
@@ -221,31 +223,22 @@ pub enum AttributeInfo {
     /// Only on the `Code` attribute, used for verification
     /// May be implicit on version >= 50.0, with no entries
     StackMapTable {
-        /// Must be `Utf8`
-        attribute_name_index: u2,
-        attribute_length: u4,
         number_of_entries: u2,
         entries: Vec<StackMapFrame>,
     },
     /// Only on `MethodInfo`, indicates which checked exceptions might be thrown
     Exceptions {
-        attribute_name_index: u2,
-        attribute_length: u4,
         number_of_exceptions: u2,
         /// Must be a `Class` constant
         exception_index_table: Vec<u2>,
     },
     /// Only on a `ClassFile`. Specifies the inner classes of a class
     InnerClasses {
-        attribute_name_index: u2,
-        attribute_length: u4,
         number_of_classes: u2,
         classes: Vec<AttributeInnerClass>,
     },
     /// Only on a `ClassFile`, required if it is local or anonymous
     EnclosingMethod {
-        attribute_name_index: u2,
-        attribute_length: u4, // 4
         /// Must be a `Class` constant, the innermost enclosing class
         class_index: u2,
         /// Must be zero or `NameAndType`
@@ -253,97 +246,67 @@ pub enum AttributeInfo {
     },
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`.
     /// Every generated class has to have this attribute or the `Synthetic` Accessor modifier
-    Synthetic {
-        attribute_name_index: u2,
-        attribute_length: u4, // 0
-    },
+    Synthetic,
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Records generic signature information
     Signature {
-        attribute_name_index: u2,
-        attribute_length: u4, // 2
         /// Must be `Utf8`, and a Class/Method/Field signature
         signature_index: u2,
     },
     /// Only on a `ClassFile`
     SourceFile {
-        attribute_name_index: u2,
-        attribute_length: u4, // 2
         /// Must be `Utf8`, the name of the source filed
         sourcefile_index: u2,
     },
     /// Only on a `ClassFile`
     SourceDebugExtension {
-        attribute_name_index: u2,
-        attribute_length: u4, // number of items in `debug_extension`
-        /// A modified UTF-8 of additional debugging information
+        /// A modified UTF-8 of additional debugging information, `attribute_length`: number of items in `debug_extension`
         debug_extension: Vec<u1>,
     },
     /// Only on the `Code` attribute. It includes line number information used by debuggers
     LineNumberTable {
-        attribute_name_index: u2,
-        attribute_length: u4,
         line_number_table_length: u2,
         line_number_table: Vec<AttributeLineNumber>,
     },
     /// Only on the `Code` attribute. It may be used to determine the value of local variables by debuggers
     LocalVariableTable {
-        attribute_name_index: u2,
-        attribute_length: u4,
         local_variable_table_length: u2,
         /// Note: the 3rd field is called `descriptor_index` and represents an field descriptor
         local_variable_table: Vec<AttributeLocalVariableTable>,
     },
     /// Only on the `Code` attribute. It provides signature information instead of descriptor information
     LocalVariableTypeTable {
-        attribute_name_index: u2,
-        attribute_length: u4,
         local_variable_table_length: u2,
         /// Note: the 3rd field is called `signature_index` and represents a field type signature
         local_variable_table: Vec<AttributeLocalVariableTable>,
     },
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Marks a class/field/method as deprecated
-    Deprecated {
-        attribute_name_index: u2,
-        attribute_length: u4, // 0
-    },
+    Deprecated,
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Contains all Runtime visible annotations
     RuntimeVisibleAnnotations {
-        attribute_name_index: u2,
-        attribute_length: u4,
         num_annotations: u2,
         annotations: Vec<Annotation>,
     },
     /// Same as `RuntimeVisibleAnnotations`, but invisible to reflection
     RuntimeInvisibleAnnotations {
-        attribute_name_index: u2,
-        attribute_length: u4,
         num_annotations: u2,
         annotations: Vec<Annotation>,
     },
     /// Only on `MethodInfo`, parameter annotations visible during runtime
     RuntimeVisibleParameterAnnotations {
-        attribute_name_index: u2,
-        attribute_length: u4,
         num_parameters: u1,
         parameter_annotations: Vec<ParameterAnnotation>,
     },
     /// Same as `RuntimeVisibleParameterAnnotations`, but invisible to reflection
     RuntimeInvisibleParameterAnnotations {
-        attribute_name_index: u2,
-        attribute_length: u4,
         num_parameters: u1,
         parameter_annotations: Vec<ParameterAnnotation>,
     },
     /// Only on `MethodInfo`, on those representing elements of annotation types, the default value of the element
     AnnotationDefault {
-        attribute_name_index: u2,
-        attribute_length: u4,
         default_value: AnnotationElementValue,
     },
     /// Only on `ClassFile`. Records bootstrap method specifiers for `invokedynamic`
     BootstrapMethods {
-        attribute_name_index: u2,
-        attribute_length: u4,
         num_bootstrap_methods: u2,
         bootstrap_methods: Vec<BootstrapMethod>,
     },
