@@ -42,7 +42,7 @@ fn parse_empty_class() {
 
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.major_version, 0x003b);
-    assert_eq!(parsed.constant_pool_count, 0x000d);
+    assert_eq!(parsed.constant_pool.len() + 1, 0x000d);
     assert_eq!(parsed.constant_pool.len(), 12);
     assert_eq!(
         parsed.constant_pool,
@@ -134,17 +134,15 @@ fn parse_empty_class() {
     assert_eq!(parsed.access_flags, 0x0021);
     assert_eq!(parsed.this_class, 7.into());
     assert_eq!(parsed.super_class, 2.into());
-    assert_eq!(parsed.interfaces_count, 0);
+    assert_eq!(parsed.interfaces.len(), 0);
     assert_eq!(parsed.interfaces, vec![]);
-    assert_eq!(parsed.fields_count, 0);
+    assert_eq!(parsed.fields.len(), 0);
     assert_eq!(parsed.fields, vec![]);
-    assert_eq!(parsed.method_count, 1);
+    assert_eq!(parsed.methods.len(), 1);
     assert_eq!(parsed.methods[0].access_flags, 1);
     assert_eq!(parsed.methods[0].name_index, 5.into());
     assert_eq!(parsed.methods[0].descriptor_index, 6.into());
-    assert_eq!(parsed.methods[0].attributes_count, 1);
-    //assert_eq!(parsed.methods[0].attributes[0].attribute_name_index, 9);
-    //assert_eq!(parsed.methods[0].attributes[0].attribute_length, 0x1d);
+    assert_eq!(parsed.methods[0].attributes.len(), 1);
 }
 
 #[test]

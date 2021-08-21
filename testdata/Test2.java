@@ -1,11 +1,13 @@
 class Test2 {
+    int myField;
+
     public static void main(String[] args) {
         int i = 0;
         i++;
-        print(i);
+        new Test2().print(i);
     }
 
-    static void print(int i) {
+    void print(int i) {
         System.out.println(i);
     }
 }

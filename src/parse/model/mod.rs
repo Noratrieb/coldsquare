@@ -4,6 +4,14 @@
 //! [The .class specs](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html)
 #![allow(dead_code)]
 
+use crate::parse::ParseErr;
+use std::marker::PhantomData;
+
+/// All of the Constants in the Constant Pool
+pub mod cp_info;
+
+pub use cp_info::FromPool;
+
 // The types used in the specs
 #[allow(non_camel_case_types)]
 pub type u1 = u8;
@@ -11,32 +19,6 @@ pub type u1 = u8;
 pub type u2 = u16;
 #[allow(non_camel_case_types)]
 pub type u4 = u32;
-
-///
-/// An index into the constant pool of the class
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct FromPool(u2);
-
-impl std::ops::Deref for FromPool {
-    type Target = u2;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<u2> for FromPool {
-    fn from(n: u2) -> Self {
-        Self(n)
-    }
-}
-
-impl FromPool {
-    pub fn get<'a>(&self, pool: &'a [CpInfo]) -> &'a CpInfo {
-        &pool[self.0 as usize - 1]
-    }
-}
 
 ///
 /// # Represents a .class file
@@ -49,30 +31,21 @@ pub struct ClassFile {
     pub minor_version: u2,
     /// The version of the class file (X.)
     pub major_version: u2,
-    /// Number of entries in the constant pool + 1
-    pub constant_pool_count: u2,
+    /// `constant_pool_count` = Number of entries in the constant pool + 1
     /// The constant pool. Indexed from 1 to constant_pool_count - 1
     pub constant_pool: Vec<CpInfo>,
     /// Mask of `ClassAccessFlag` used to denote access permissions
     pub access_flags: u2,
-    /// A valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
-    pub this_class: FromPool,
+    /// A valid index into the `constant_pool` table. The entry must be a `Class`
+    pub this_class: FromPool<cp_info::Class>,
     /// Zero or a valid index into the `constant_pool` table
-    pub super_class: FromPool,
-    /// The number if direct superinterfaces of this class or interface type
-    pub interfaces_count: u2,
-    /// Each entry must be a valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
-    pub interfaces: Vec<u2>,
-    /// The number of fields in the `fields` table
-    pub fields_count: u2,
+    pub super_class: FromPool<Option<cp_info::Class>>,
+    /// Each entry must be a valid index into the `constant_pool` table. The entry must be a `Class`
+    pub interfaces: Vec<FromPool<cp_info::Class>>,
     /// All fields of the class. Contains only fields of the class itself
     pub fields: Vec<FieldInfo>,
-    /// The number of methods in `methods`
-    pub method_count: u2,
     /// All methods of the class. If it's neither Native nor Abstract, the implementation has to be provided too
     pub methods: Vec<MethodInfo>,
-    /// The number of attributes in `attributes`
-    pub attributes_count: u2,
     /// All attributes of the class
     pub attributes: Vec<AttributeInfo>,
 }
@@ -107,110 +80,15 @@ pub enum CpInfoInner {
     InvokeDynamic(cp_info::InvokeDynamic),
 }
 
-pub mod cp_info {
-    use super::*;
-
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Class {
-        /// Entry must be `Utf8`
-        pub name_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Fieldref {
-        /// May be a class or interface type
-        pub class_index: FromPool,
-        /// Entry must be `NameAndType`
-        pub name_and_type_index: FromPool,
-    }
-    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    pub struct MethodRef {
-        /// Must be a class type
-        pub class_index: FromPool,
-        /// Entry must be `NameAndType`
-        pub name_and_type_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct InterfaceMethodref {
-        /// Must be an interface type
-        pub class_index: FromPool,
-        /// Entry must be `NameAndType`
-        pub name_and_type_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct String {
-        /// Entry must be `Utf8`
-        pub string_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Integer {
-        // Big endian
-        pub bytes: u4,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Float {
-        /// IEEE 754 floating-point single format, big endian
-        pub bytes: u4,
-    }
-    /// 8 byte constants take up two spaces in the constant pool
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Long {
-        /// Big endian
-        pub high_bytes: u4,
-        /// Big endian
-        pub low_bytes: u4,
-    }
-    /// 8 byte constants take up two spaces in the constant pool
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct Double {
-        /// IEEE 754 floating-point double format, big endian
-        pub high_bytes: u4,
-        /// IEEE 754 floating-point double format, big endian
-        pub low_bytes: u4,
-    }
-    /// Any field or method, without the class it belongs to
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct NameAndType {
-        /// Entry must be `Utf8`
-        pub name_index: FromPool,
-        /// Entry must be `Utf8`
-        pub descriptor_index: FromPool,
-    }
-    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-    pub struct Utf8 {
-        /// The length of the String. Not null-terminated.
-        pub length: u2,
-        /// Contains modified UTF-8
-        pub bytes: std::string::String,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct MethodHandle {
-        /// The kind of method handle (0-9)
-        pub reference_kind: u1,
-        /// If the kind is 1-4, the entry must be `FieldRef`. If the kind is 5-8, the entry must be `MethodRef`
-        /// If the kind is 9, the entry must be `InterfaceMethodRef`
-        pub reference_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct MethodType {
-        /// Entry must be `Utf8`
-        pub descriptor_index: FromPool,
-    }
-    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-    pub struct InvokeDynamic {
-        /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class field
-        pub bootstrap_method_attr_index: u2,
-        /// Entry must `NameAndType`
-        pub name_and_type_index: FromPool,
-    }
-}
-
 /// Information about a field
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FieldInfo {
+    /// Mask of `FieldAccessFlag` used to denote access permissions
     pub access_flags: u2,
-    pub name_index: FromPool,
-    pub descriptor_index: FromPool,
-    pub attributes_count: u2,
+    /// Entry must be `Utf8`
+    pub name_index: FromPool<cp_info::Utf8>,
+    /// Entry must be `Utf8`
+    pub descriptor_index: FromPool<cp_info::Utf8>,
     pub attributes: Vec<AttributeInfo>,
 }
 
@@ -220,11 +98,9 @@ pub struct MethodInfo {
     /// Mask of `MethodAccessFlag` used to denote access permissions
     pub access_flags: u2,
     /// Index to the `constant_pool` of the method name, must be `Utf8`
-    pub name_index: FromPool,
+    pub name_index: FromPool<cp_info::Utf8>,
     /// Index to the `constant_pool` of the method descriptor, must be `Utf8`
-    pub descriptor_index: FromPool,
-    /// The amount of attributes for this method
-    pub attributes_count: u2,
+    pub descriptor_index: FromPool<cp_info::Utf8>,
     /// The attributes for this method
     pub attributes: Vec<AttributeInfo>,
 }
@@ -237,10 +113,19 @@ pub struct MethodInfo {
 /// _index: Index to the `constant_pool` table of any type
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AttributeInfo {
-    pub attribute_name_index: FromPool,
+    pub attribute_name_index: FromPool<cp_info::Utf8>,
     pub attribute_length: u4,
     /// The attribute value
     pub inner: AttributeInfoInner,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum ConstantValueIndex {
+    Long(cp_info::Long),
+    Float(cp_info::Float),
+    Double(cp_info::Double),
+    Integer(cp_info::Integer),
+    String(cp_info::String),
 }
 
 /// The Attributes, without the two common fields
@@ -254,7 +139,7 @@ pub enum AttributeInfoInner {
     /// Only on fields, the constant value of that field
     ConstantValue {
         /// Must be of type `Long`/`Float`/`Double`/`Integer`/`String`
-        constantvalue_index: FromPool,
+        constantvalue_index: FromPool<ConstantValueIndex>,
     },
     /// Only on methods, contains JVM instructions and auxiliary information for a single method
     Code {
@@ -262,15 +147,10 @@ pub enum AttributeInfoInner {
         max_stack: u2,
         /// The number of the local variables array, including the parameters
         max_locals: u2,
-        /// The length of the JVM bytecode in bytes
-        code_length: u4,
         /// The JVM bytecode of this method
         code: Vec<u1>,
-        /// The number of entries in the exception table
-        exception_table_length: u2,
         /// The exception handlers for this method
         exception_table: Vec<AttributeCodeException>,
-        attributes_count: u2,
         /// The attributes of the code
         attributes: Vec<AttributeInfo>,
     },
@@ -282,21 +162,19 @@ pub enum AttributeInfoInner {
     },
     /// Only on `MethodInfo`, indicates which checked exceptions might be thrown
     Exceptions {
-        number_of_exceptions: u2,
         /// Must be a `Class` constant
         exception_index_table: Vec<u2>,
     },
     /// Only on a `ClassFile`. Specifies the inner classes of a class
     InnerClasses {
-        number_of_classes: u2,
         classes: Vec<AttributeInnerClass>,
     },
     /// Only on a `ClassFile`, required if it is local or anonymous
     EnclosingMethod {
         /// Must be a `Class` constant, the innermost enclosing class
-        class_index: FromPool,
+        class_index: FromPool<cp_info::Class>,
         /// Must be zero or `NameAndType`
-        method_index: FromPool,
+        method_index: FromPool<cp_info::NameAndType>,
     },
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`.
     /// Every generated class has to have this attribute or the `Synthetic` Accessor modifier
@@ -304,12 +182,12 @@ pub enum AttributeInfoInner {
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Records generic signature information
     Signature {
         /// Must be `Utf8`, and a Class/Method/Field signature
-        signature_index: FromPool,
+        signature_index: FromPool<cp_info::Utf8>,
     },
     /// Only on a `ClassFile`
     SourceFile {
         /// Must be `Utf8`, the name of the source filed
-        sourcefile_index: FromPool,
+        sourcefile_index: FromPool<cp_info::Utf8>,
     },
     /// Only on a `ClassFile`
     SourceDebugExtension {
@@ -318,18 +196,15 @@ pub enum AttributeInfoInner {
     },
     /// Only on the `Code` attribute. It includes line number information used by debuggers
     LineNumberTable {
-        line_number_table_length: u2,
         line_number_table: Vec<AttributeLineNumber>,
     },
     /// Only on the `Code` attribute. It may be used to determine the value of local variables by debuggers
     LocalVariableTable {
-        local_variable_table_length: u2,
         /// Note: the 3rd field is called `descriptor_index` and represents an field descriptor
         local_variable_table: Vec<AttributeLocalVariableTable>,
     },
     /// Only on the `Code` attribute. It provides signature information instead of descriptor information
     LocalVariableTypeTable {
-        local_variable_table_length: u2,
         /// Note: the 3rd field is called `signature_index` and represents a field type signature
         local_variable_table: Vec<AttributeLocalVariableTable>,
     },
@@ -337,22 +212,18 @@ pub enum AttributeInfoInner {
     Deprecated,
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Contains all Runtime visible annotations
     RuntimeVisibleAnnotations {
-        num_annotations: u2,
         annotations: Vec<Annotation>,
     },
     /// Same as `RuntimeVisibleAnnotations`, but invisible to reflection
     RuntimeInvisibleAnnotations {
-        num_annotations: u2,
         annotations: Vec<Annotation>,
     },
     /// Only on `MethodInfo`, parameter annotations visible during runtime
     RuntimeVisibleParameterAnnotations {
-        num_parameters: u1,
         parameter_annotations: Vec<ParameterAnnotation>,
     },
     /// Same as `RuntimeVisibleParameterAnnotations`, but invisible to reflection
     RuntimeInvisibleParameterAnnotations {
-        num_parameters: u1,
         parameter_annotations: Vec<ParameterAnnotation>,
     },
     /// Only on `MethodInfo`, on those representing elements of annotation types, the default value of the element
@@ -361,7 +232,6 @@ pub enum AttributeInfoInner {
     },
     /// Only on `ClassFile`. Records bootstrap method specifiers for `invokedynamic`
     BootstrapMethods {
-        num_bootstrap_methods: u2,
         bootstrap_methods: Vec<BootstrapMethod>,
     },
 }
@@ -422,9 +292,7 @@ pub enum StackMapFrame {
     FullFrame {
         frame_type: u1, //255
         offset_delta: u2,
-        number_of_locals: u2,
         locals: Vec<VerificationTypeInfo>,
-        number_of_stack_items: u2,
         stack: Vec<VerificationTypeInfo>,
     },
 }
@@ -456,7 +324,7 @@ pub enum VerificationTypeInfo {
     Object {
         tag: u1, // 7
         /// Must be a `Class`
-        cpool_index: u2,
+        cpool_index: FromPool<cp_info::Class>,
     },
     Uninitialized {
         tag: u1, // 8
@@ -468,11 +336,11 @@ pub enum VerificationTypeInfo {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeInnerClass {
     /// Must be a `Class`
-    pub inner_class_info_index: FromPool,
+    pub inner_class_info_index: FromPool<cp_info::Class>,
     /// Must be 0 or a `Class`
-    pub outer_class_info_index: FromPool,
+    pub outer_class_info_index: FromPool<cp_info::Class>,
     /// Must be 0 or `Utf8`
-    pub inner_class_name_index: FromPool,
+    pub inner_class_name_index: FromPool<cp_info::Utf8>,
     /// Must be a mask of `InnerClassAccessFlags`
     pub inner_class_access_flags: u2,
 }
@@ -494,9 +362,9 @@ pub struct AttributeLocalVariableTable {
     /// The local variable must have a value between `start_pc` and `start_pc + length`
     pub length: u2,
     /// Must be `Utf8`
-    pub name_index: FromPool,
+    pub name_index: FromPool<cp_info::Utf8>,
     /// Must be `Utf8`, field descriptor or field signature encoding the type
-    pub descriptor_or_signature_index: FromPool,
+    pub descriptor_or_signature_index: FromPool<cp_info::Utf8>,
     /// The variable must be at `index` in the local variable array
     pub index: u2,
 }
@@ -505,7 +373,7 @@ pub struct AttributeLocalVariableTable {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Annotation {
     /// Must be `Utf8`
-    pub type_index: FromPool,
+    pub type_index: FromPool<cp_info::Utf8>,
     pub num_element_value_pairs: u2,
     pub element_value_pairs: Vec<AnnotationElementValuePair>,
 }
@@ -516,7 +384,7 @@ pub struct Annotation {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AnnotationElementValuePair {
     /// Must be `Utf8`
-    pub element_name_index: FromPool,
+    pub element_name_index: FromPool<cp_info::Utf8>,
     pub element_name_name: AnnotationElementValue,
 }
 
@@ -534,19 +402,19 @@ pub enum AnnotationElementValueValue {
     /// If the tag is B, C, D, F, I, J, S, Z, or s.
     ConstValueIndex {
         /// Must be the matching constant pool entry
-        index: FromPool,
+        index: FromPool<CpInfoInner>,
     },
     /// If the tag is e
     EnumConstValue {
         /// Must be `Utf8`
-        type_name_index: FromPool,
+        type_name_index: FromPool<cp_info::Utf8>,
         /// Must be `Utf8`
-        const_name_index: FromPool,
+        const_name_index: FromPool<cp_info::Utf8>,
     },
     /// If the tag is c
     ClassInfoIndex {
         /// Must be `Utf8`, for example Ljava/lang/Object; for Object
-        index: FromPool,
+        index: FromPool<cp_info::Utf8>,
     },
     /// If the tag is @
     AnnotationValue {
@@ -554,16 +422,12 @@ pub enum AnnotationElementValueValue {
         annotation: Box<Annotation>,
     },
     /// If the tag is [
-    ArrayValue {
-        num_values: u2,
-        values: Vec<AnnotationElementValue>,
-    },
+    ArrayValue { values: Vec<AnnotationElementValue> },
 }
 
 /// Used in `AttributeInfo::RuntimeVisibleParameterAnnotations`
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ParameterAnnotation {
-    pub num_annotations: u2,
     pub annotations: Vec<Annotation>,
 }
 
@@ -571,10 +435,9 @@ pub struct ParameterAnnotation {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BootstrapMethod {
     /// Must be a `MethodHandle`
-    pub bootstrap_method_ref: FromPool,
-    pub num_bootstrap_arguments: u2,
+    pub bootstrap_method_ref: FromPool<cp_info::MethodHandle>,
     /// Each argument is a cpool entry. The constants must be `String, Class, Integer, Long, Float, Double, MethodHandle, or MethodType`
-    pub bootstrap_arguments: Vec<FromPool>,
+    pub bootstrap_arguments: Vec<FromPool<CpInfoInner>>,
 }
 
 /////// Access Flags

@@ -44,7 +44,7 @@ impl<'a> Data<'a> {
         Ok(((self.u1()? as u2) << 8) | self.u1()? as u2)
     }
 
-    fn cp(&mut self) -> Result<FromPool> {
+    fn cp<T>(&mut self) -> Result<FromPool<T>> {
         Ok(self.u2()?.into())
     }
 
@@ -89,7 +89,7 @@ trait Parse {
         Self: Sized;
 }
 
-fn parse_vec<T: Parse, S: Into<usize>>(data: &mut Data, len: S) -> Result<Vec<T>> {
+fn parse_vec<T: Parse, S: Into<usize>>(len: S, data: &mut Data) -> Result<Vec<T>> {
     let len = len.into();
     let mut vec = Vec::with_capacity(len);
     for _ in 0..len {
@@ -113,7 +113,7 @@ macro_rules! parse_primitive {
 
 parse_primitive!(u1, u2, u4);
 
-impl Parse for FromPool {
+impl<T> Parse for FromPool<T> {
     fn parse(data: &mut Data) -> Result<Self> {
         Ok(data.u2()?.into())
     }
@@ -125,36 +125,26 @@ impl Parse for ClassFile {
         assert_eq!(magic, 0xCAFEBABE);
         let minor_version = data.u2()?;
         let major_version = data.u2()?;
-        let constant_pool_count = data.u2()?;
-        let constant_pool = parse_vec(data, constant_pool_count - 1)?; // the minus one is important
+        let constant_pool = parse_vec(data.u2()? - 1, data)?; // the minus one is important
         let access_flags = data.u2()?;
         let this_class = data.cp()?;
         let super_class = data.cp()?;
-        let interfaces_count = data.u2()?;
-        let interfaces = parse_vec(data, interfaces_count)?;
-        let fields_count = data.u2()?;
-        let fields = parse_vec(data, fields_count)?;
-        let method_count = data.u2()?;
-        let methods = parse_vec(data, method_count)?;
-        let attributes_count = data.u2()?;
-        let attributes = parse_vec(data, attributes_count)?;
+        let interfaces = parse_vec(data.u2()?, data)?;
+        let fields = parse_vec(data.u2()?, data)?;
+        let methods = parse_vec(data.u2()?, data)?;
+        let attributes = parse_vec(data.u2()?, data)?;
 
         let mut class = Self {
             magic,
             minor_version,
             major_version,
-            constant_pool_count,
             constant_pool,
             access_flags,
             this_class,
             super_class,
-            interfaces_count,
             interfaces,
-            fields_count,
             fields,
-            method_count,
             methods,
-            attributes_count,
             attributes,
         };
         resolve_attributes(&mut class)?;
@@ -232,8 +222,7 @@ impl Parse for CpInfo {
             1 => Self {
                 tag,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: data.u2()?,
-                    bytes: String::from_utf8(parse_vec(data, data.last_u2()?)?).map_err(|err| {
+                    bytes: String::from_utf8(parse_vec(data.u2()?, data)?).map_err(|err| {
                         ParseErr(format!("Invalid utf8 in CpInfo::Utf8: {}", err))
                     })?,
                 }),
@@ -242,7 +231,17 @@ impl Parse for CpInfo {
                 tag,
                 inner: CpInfoInner::MethodHandle(cp_info::MethodHandle {
                     reference_kind: data.u1()?,
-                    reference_index: data.cp()?,
+                    reference_index: match data.last_u1()? {
+                        1..=4 => cp_info::MethodHandleIndex::Field(data.cp()?),
+                        5..=8 => cp_info::MethodHandleIndex::Method(data.cp()?),
+                        9 => cp_info::MethodHandleIndex::Interface(data.cp()?),
+                        n => {
+                            return Err(ParseErr(format!(
+                                "Invalid MethodHandle reference kind: {}",
+                                n
+                            )))
+                        }
+                    },
                 }),
             },
             16 => Self {
@@ -269,8 +268,7 @@ impl Parse for FieldInfo {
             access_flags: data.u2()?,
             name_index: data.cp()?,
             descriptor_index: data.cp()?,
-            attributes_count: data.u2()?,
-            attributes: parse_vec(data, data.last_u2()?)?,
+            attributes: parse_vec(data.u2()?, data)?,
         })
     }
 }
@@ -281,8 +279,7 @@ impl Parse for MethodInfo {
             access_flags: data.u2()?,
             name_index: data.cp()?,
             descriptor_index: data.cp()?,
-            attributes_count: data.u2()?,
-            attributes: parse_vec(data, data.last_u2()?)?,
+            attributes: parse_vec(data.u2()?, data)?,
         })
     }
 }
@@ -293,7 +290,7 @@ impl Parse for AttributeInfo {
             attribute_name_index: data.cp()?,
             attribute_length: data.u4()?,
             inner: AttributeInfoInner::Unknown {
-                attribute_content: parse_vec(data, data.last_u4()? as usize)?,
+                attribute_content: parse_vec(data.last_u4()? as usize, data)?,
             },
         })
     }
@@ -336,15 +333,13 @@ impl Parse for StackMapFrame {
             252..=254 => Self::AppendFrame {
                 frame_type,
                 offset_delta: data.u2()?,
-                locals: parse_vec(data, data.last_u2()?)?,
+                locals: parse_vec(data.last_u2()?, data)?,
             },
             255 => Self::FullFrame {
                 frame_type,
                 offset_delta: data.u2()?,
-                number_of_locals: data.u2()?,
-                locals: parse_vec(data, data.last_u2()?)?,
-                number_of_stack_items: data.u2()?,
-                stack: parse_vec(data, data.last_u2()?)?,
+                locals: parse_vec(data.u2()?, data)?,
+                stack: parse_vec(data.u2()?, data)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid StackMapFrame type: {}",
@@ -367,7 +362,7 @@ impl Parse for VerificationTypeInfo {
             6 => Self::UninitializedThis { tag },
             7 => Self::Object {
                 tag,
-                cpool_index: data.u2()?,
+                cpool_index: data.u2()?.into(),
             },
             8 => Self::Uninitialized {
                 tag,
@@ -418,7 +413,7 @@ impl Parse for Annotation {
         Ok(Self {
             type_index: data.cp()?,
             num_element_value_pairs: data.u2()?,
-            element_value_pairs: parse_vec(data, data.last_u2()?)?,
+            element_value_pairs: parse_vec(data.last_u2()?, data)?,
         })
     }
 }
@@ -457,8 +452,7 @@ impl Parse for AnnotationElementValueValue {
                 annotation: Box::new(Annotation::parse(data)?),
             },
             '[' => Self::ArrayValue {
-                num_values: data.u2()?,
-                values: parse_vec(data, data.last_u2()?)?,
+                values: parse_vec(data.u2()?, data)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid AnnotationElementValueValue tag: {}",
@@ -471,8 +465,7 @@ impl Parse for AnnotationElementValueValue {
 impl Parse for ParameterAnnotation {
     fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
-            num_annotations: data.u2()?,
-            annotations: parse_vec(data, data.last_u2()?)?,
+            annotations: parse_vec(data.u2()?, data)?,
         })
     }
 }
@@ -481,8 +474,7 @@ impl Parse for BootstrapMethod {
     fn parse(data: &mut Data) -> Result<Self> {
         Ok(Self {
             bootstrap_method_ref: data.cp()?,
-            num_bootstrap_arguments: data.u2()?,
-            bootstrap_arguments: parse_vec(data, data.last_u2()?)?,
+            bootstrap_arguments: parse_vec(data.u2()?, data)?,
         })
     }
 }
@@ -558,7 +550,7 @@ impl AttributeInfo {
 
     fn resolve_attribute_inner(
         &mut self,
-        attribute_name_index: FromPool,
+        attribute_name_index: FromPool<cp_info::Utf8>,
         attribute_length: u32,
         name: &str,
         data: &mut Data,
@@ -581,12 +573,9 @@ impl AttributeInfo {
                         inner: AttributeInfoInner::Code {
                             max_stack: data.u2()?,
                             max_locals: data.u2()?,
-                            code_length: data.u4()?,
-                            code: parse_vec(data, data.last_u4()? as usize)?,
-                            exception_table_length: data.u2()?,
-                            exception_table: parse_vec(data, data.last_u2()?)?,
-                            attributes_count: data.u2()?,
-                            attributes: parse_vec(data, data.last_u2()?)?,
+                            code: parse_vec(data.u4()? as usize, data)?,
+                            exception_table: parse_vec(data.u2()?, data)?,
+                            attributes: parse_vec(data.u2()?, data)?,
                         },
                     };
                     if let AttributeInfoInner::Code {
@@ -607,23 +596,21 @@ impl AttributeInfo {
                     attribute_length,
                     inner: AttributeInfoInner::StackMapTable {
                         number_of_entries: data.u2()?,
-                        entries: parse_vec(data, data.last_u2()?)?,
+                        entries: parse_vec(data.last_u2()?, data)?,
                     },
                 },
                 "Exceptions" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::Exceptions {
-                        number_of_exceptions: data.u2()?,
-                        exception_index_table: parse_vec(data, data.last_u2()?)?,
+                        exception_index_table: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "InnerClasses" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::InnerClasses {
-                        number_of_classes: data.u2()?,
-                        classes: parse_vec(data, data.last_u2()?)?,
+                        classes: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "EnclosingMethod" => Self {
@@ -657,31 +644,28 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::SourceDebugExtension {
-                        debug_extension: parse_vec(data, data.last_u2()?)?,
+                        debug_extension: parse_vec(data.last_u2()?, data)?,
                     },
                 },
                 "LineNumberTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LineNumberTable {
-                        line_number_table_length: data.u2()?,
-                        line_number_table: parse_vec(data, data.last_u2()?)?,
+                        line_number_table: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "LocalVariableTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LocalVariableTable {
-                        local_variable_table_length: data.u2()?,
-                        local_variable_table: parse_vec(data, data.last_u2()?)?,
+                        local_variable_table: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "LocalVariableTypeTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LocalVariableTypeTable {
-                        local_variable_table_length: data.u2()?,
-                        local_variable_table: parse_vec(data, data.last_u2()?)?,
+                        local_variable_table: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "Deprecated" => Self {
@@ -693,32 +677,28 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeVisibleAnnotations {
-                        num_annotations: data.u2()?,
-                        annotations: parse_vec(data, data.last_u2()?)?,
+                        annotations: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "RuntimeInvisibleAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeInvisibleAnnotations {
-                        num_annotations: data.u2()?,
-                        annotations: parse_vec(data, data.last_u2()?)?,
+                        annotations: parse_vec(data.u2()?, data)?,
                     },
                 },
                 "RuntimeVisibleParameterAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeVisibleParameterAnnotations {
-                        num_parameters: data.u1()?,
-                        parameter_annotations: parse_vec(data, data.last_u1()?)?,
+                        parameter_annotations: parse_vec(data.u1()?, data)?,
                     },
                 },
                 "RuntimeInvisibleParameterAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeInvisibleParameterAnnotations {
-                        num_parameters: data.u1()?,
-                        parameter_annotations: parse_vec(data, data.last_u1()?)?,
+                        parameter_annotations: parse_vec(data.u1()?, data)?,
                     },
                 },
                 "AnnotationDefault" => Self {
@@ -735,8 +715,7 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::BootstrapMethods {
-                        num_bootstrap_methods: data.u2()?,
-                        bootstrap_methods: parse_vec(data, data.last_u2()?)?,
+                        bootstrap_methods: parse_vec(data.u2()?, data)?,
                     },
                 },
                 name => return Err(ParseErr(format!("Invalid Attribute name: {}", name))),
