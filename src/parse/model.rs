@@ -13,6 +13,32 @@ pub type u2 = u16;
 pub type u4 = u32;
 
 ///
+/// An index into the constant pool of the class
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct FromPool(u2);
+
+impl std::ops::Deref for FromPool {
+    type Target = u2;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<u2> for FromPool {
+    fn from(n: u2) -> Self {
+        Self(n)
+    }
+}
+
+impl FromPool {
+    pub fn get<'a>(&self, pool: &'a [CpInfo]) -> &'a CpInfo {
+        &pool[self.0 as usize - 1]
+    }
+}
+
+///
 /// # Represents a .class file
 ///
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -30,9 +56,9 @@ pub struct ClassFile {
     /// Mask of `ClassAccessFlag` used to denote access permissions
     pub access_flags: u2,
     /// A valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
-    pub this_class: u2,
+    pub this_class: FromPool,
     /// Zero or a valid index into the `constant_pool` table
-    pub super_class: u2,
+    pub super_class: FromPool,
     /// The number if direct superinterfaces of this class or interface type
     pub interfaces_count: u2,
     /// Each entry must be a valid index into the `constant_pool` table. The entry must be a `ConstantClassInfo`
@@ -55,107 +81,135 @@ pub struct ClassFile {
 /// May have indices back to the constant pool, with expected types
 /// _index: A valid index into the `constant_pool` table.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum CpInfo {
-    Class {
-        tag: u1, // 7
-        /// Entry must be `Utf8`
-        name_index: u2,
-    },
-    Fieldref {
-        tag: u1, // 9
-        /// May be a class or interface type
-        class_index: u2,
-        /// Entry must be `NameAndType`
-        name_and_type_index: u2,
-    },
-    MethodRef {
-        tag: u1, // 10
-        /// Must be a class type
-        class_index: u2,
-        /// Entry must be `NameAndType`
-        name_and_type_index: u2,
-    },
-    InterfaceMethodref {
-        tag: u1, // 11
-        /// Must be an interface type
-        class_index: u2,
-        /// Entry must be `NameAndType`
-        name_and_type_index: u2,
-    },
-    String {
-        tag: u1, // 8
-        /// Entry must be `Utf8`
-        string_index: u2,
-    },
-    Integer {
-        tag: u1, // 3
-        // Big endian
-        bytes: u4,
-    },
-    Float {
-        tag: u1, // 4
-        /// IEEE 754 floating-point single format, big endian
-        bytes: u4,
-    },
+pub struct CpInfo {
+    pub tag: u1,
+    pub inner: CpInfoInner,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum CpInfoInner {
+    Class(cp_info::Class),
+    Fieldref(cp_info::Fieldref),
+    MethodRef(cp_info::MethodRef),
+    InterfaceMethodref(cp_info::InterfaceMethodref),
+    String(cp_info::String),
+    Integer(cp_info::Integer),
+    Float(cp_info::Float),
     /// 8 byte constants take up two spaces in the constant pool
-    Long {
-        tag: u1, // 5
-        /// Big endian
-        high_bytes: u4,
-        /// Big endian
-        low_bytes: u4,
-    },
+    Long(cp_info::Long),
     /// 8 byte constants take up two spaces in the constant pool
-    Double {
-        tag: u1, // 6
-        /// IEEE 754 floating-point double format, big endian
-        high_bytes: u4,
-        /// IEEE 754 floating-point double format, big endian
-        low_bytes: u4,
-    },
+    Double(cp_info::Double),
     /// Any field or method, without the class it belongs to
-    NameAndType {
-        tag: u1, // 12
+    NameAndType(cp_info::NameAndType),
+    Utf8(cp_info::Utf8),
+    MethodHandle(cp_info::MethodHandle),
+    MethodType(cp_info::MethodType),
+    InvokeDynamic(cp_info::InvokeDynamic),
+}
+
+pub mod cp_info {
+    use super::*;
+
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Class {
         /// Entry must be `Utf8`
-        name_index: u2,
+        pub name_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Fieldref {
+        /// May be a class or interface type
+        pub class_index: FromPool,
+        /// Entry must be `NameAndType`
+        pub name_and_type_index: FromPool,
+    }
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    pub struct MethodRef {
+        /// Must be a class type
+        pub class_index: FromPool,
+        /// Entry must be `NameAndType`
+        pub name_and_type_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct InterfaceMethodref {
+        /// Must be an interface type
+        pub class_index: FromPool,
+        /// Entry must be `NameAndType`
+        pub name_and_type_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct String {
         /// Entry must be `Utf8`
-        descriptor_index: u2,
-    },
-    Utf8 {
-        tag: u1, // 1
+        pub string_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Integer {
+        // Big endian
+        pub bytes: u4,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Float {
+        /// IEEE 754 floating-point single format, big endian
+        pub bytes: u4,
+    }
+    /// 8 byte constants take up two spaces in the constant pool
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Long {
+        /// Big endian
+        pub high_bytes: u4,
+        /// Big endian
+        pub low_bytes: u4,
+    }
+    /// 8 byte constants take up two spaces in the constant pool
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct Double {
+        /// IEEE 754 floating-point double format, big endian
+        pub high_bytes: u4,
+        /// IEEE 754 floating-point double format, big endian
+        pub low_bytes: u4,
+    }
+    /// Any field or method, without the class it belongs to
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct NameAndType {
+        /// Entry must be `Utf8`
+        pub name_index: FromPool,
+        /// Entry must be `Utf8`
+        pub descriptor_index: FromPool,
+    }
+    #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+    pub struct Utf8 {
         /// The length of the String. Not null-terminated.
-        length: u2,
+        pub length: u2,
         /// Contains modified UTF-8
-        bytes: String,
-    },
-    MethodHandle {
-        tag: u1, // 15
+        pub bytes: std::string::String,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct MethodHandle {
         /// The kind of method handle (0-9)
-        reference_kind: u1,
+        pub reference_kind: u1,
         /// If the kind is 1-4, the entry must be `FieldRef`. If the kind is 5-8, the entry must be `MethodRef`
         /// If the kind is 9, the entry must be `InterfaceMethodRef`
-        reference_index: u2,
-    },
-    MethodType {
-        tag: u1, // 16
+        pub reference_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct MethodType {
         /// Entry must be `Utf8`
-        descriptor_index: u2,
-    },
-    InvokeDynamic {
-        tag: u1, // 18
-        /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class fiel
-        bootstrap_method_attr_index: u2,
+        pub descriptor_index: FromPool,
+    }
+    #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+    pub struct InvokeDynamic {
+        /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class field
+        pub bootstrap_method_attr_index: u2,
         /// Entry must `NameAndType`
-        name_and_type_index: u2,
-    },
+        pub name_and_type_index: FromPool,
+    }
 }
 
 /// Information about a field
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct FieldInfo {
     pub access_flags: u2,
-    pub name_index: u2,
-    pub descriptor_index: u2,
+    pub name_index: FromPool,
+    pub descriptor_index: FromPool,
     pub attributes_count: u2,
     pub attributes: Vec<AttributeInfo>,
 }
@@ -166,9 +220,9 @@ pub struct MethodInfo {
     /// Mask of `MethodAccessFlag` used to denote access permissions
     pub access_flags: u2,
     /// Index to the `constant_pool` of the method name, must be `Utf8`
-    pub name_index: u2,
+    pub name_index: FromPool,
     /// Index to the `constant_pool` of the method descriptor, must be `Utf8`
-    pub descriptor_index: u2,
+    pub descriptor_index: FromPool,
     /// The amount of attributes for this method
     pub attributes_count: u2,
     /// The attributes for this method
@@ -183,7 +237,7 @@ pub struct MethodInfo {
 /// _index: Index to the `constant_pool` table of any type
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AttributeInfo {
-    pub attribute_name_index: u2,
+    pub attribute_name_index: FromPool,
     pub attribute_length: u4,
     /// The attribute value
     pub inner: AttributeInfoInner,
@@ -200,7 +254,7 @@ pub enum AttributeInfoInner {
     /// Only on fields, the constant value of that field
     ConstantValue {
         /// Must be of type `Long`/`Float`/`Double`/`Integer`/`String`
-        constantvalue_index: u2,
+        constantvalue_index: FromPool,
     },
     /// Only on methods, contains JVM instructions and auxiliary information for a single method
     Code {
@@ -240,9 +294,9 @@ pub enum AttributeInfoInner {
     /// Only on a `ClassFile`, required if it is local or anonymous
     EnclosingMethod {
         /// Must be a `Class` constant, the innermost enclosing class
-        class_index: u2,
+        class_index: FromPool,
         /// Must be zero or `NameAndType`
-        method_index: u2,
+        method_index: FromPool,
     },
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`.
     /// Every generated class has to have this attribute or the `Synthetic` Accessor modifier
@@ -250,12 +304,12 @@ pub enum AttributeInfoInner {
     /// Can be on `ClassFile`, `FieldInfo`,or `MethodInfo`. Records generic signature information
     Signature {
         /// Must be `Utf8`, and a Class/Method/Field signature
-        signature_index: u2,
+        signature_index: FromPool,
     },
     /// Only on a `ClassFile`
     SourceFile {
         /// Must be `Utf8`, the name of the source filed
-        sourcefile_index: u2,
+        sourcefile_index: FromPool,
     },
     /// Only on a `ClassFile`
     SourceDebugExtension {
@@ -414,11 +468,11 @@ pub enum VerificationTypeInfo {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct AttributeInnerClass {
     /// Must be a `Class`
-    pub inner_class_info_index: u2,
+    pub inner_class_info_index: FromPool,
     /// Must be 0 or a `Class`
-    pub outer_class_info_index: u2,
+    pub outer_class_info_index: FromPool,
     /// Must be 0 or `Utf8`
-    pub inner_class_name_index: u2,
+    pub inner_class_name_index: FromPool,
     /// Must be a mask of `InnerClassAccessFlags`
     pub inner_class_access_flags: u2,
 }
@@ -440,9 +494,9 @@ pub struct AttributeLocalVariableTable {
     /// The local variable must have a value between `start_pc` and `start_pc + length`
     pub length: u2,
     /// Must be `Utf8`
-    pub name_index: u2,
+    pub name_index: FromPool,
     /// Must be `Utf8`, field descriptor or field signature encoding the type
-    pub descriptor_or_signature_index: u2,
+    pub descriptor_or_signature_index: FromPool,
     /// The variable must be at `index` in the local variable array
     pub index: u2,
 }
@@ -451,7 +505,7 @@ pub struct AttributeLocalVariableTable {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Annotation {
     /// Must be `Utf8`
-    pub type_index: u2,
+    pub type_index: FromPool,
     pub num_element_value_pairs: u2,
     pub element_value_pairs: Vec<AnnotationElementValuePair>,
 }
@@ -462,7 +516,7 @@ pub struct Annotation {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AnnotationElementValuePair {
     /// Must be `Utf8`
-    pub element_name_index: u2,
+    pub element_name_index: FromPool,
     pub element_name_name: AnnotationElementValue,
 }
 
@@ -480,19 +534,19 @@ pub enum AnnotationElementValueValue {
     /// If the tag is B, C, D, F, I, J, S, Z, or s.
     ConstValueIndex {
         /// Must be the matching constant pool entry
-        index: u2,
+        index: FromPool,
     },
     /// If the tag is e
     EnumConstValue {
         /// Must be `Utf8`
-        type_name_index: u2,
+        type_name_index: FromPool,
         /// Must be `Utf8`
-        const_name_index: u2,
+        const_name_index: FromPool,
     },
     /// If the tag is c
     ClassInfoIndex {
         /// Must be `Utf8`, for example Ljava/lang/Object; for Object
-        index: u2,
+        index: FromPool,
     },
     /// If the tag is @
     AnnotationValue {
@@ -517,10 +571,10 @@ pub struct ParameterAnnotation {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BootstrapMethod {
     /// Must be a `MethodHandle`
-    pub bootstrap_method_ref: u2,
+    pub bootstrap_method_ref: FromPool,
     pub num_bootstrap_arguments: u2,
     /// Each argument is a cpool entry. The constants must be `String, Class, Integer, Long, Float, Double, MethodHandle, or MethodType`
-    pub bootstrap_arguments: Vec<u2>,
+    pub bootstrap_arguments: Vec<FromPool>,
 }
 
 /////// Access Flags
