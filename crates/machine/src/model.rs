@@ -1,49 +1,56 @@
 pub struct OperandStack {
-    vec: Vec<u32>,
+    arr: [u32; 255],
+    sp: u8,
 }
 
 impl OperandStack {
-    pub fn new() -> OperandStack {
-        OperandStack { vec: vec![] }
+    pub fn new() -> Self {
+        Self {
+            arr: [0; 255],
+            sp: 0,
+        }
     }
 
     pub fn pop(&mut self) -> u32 {
-        self.vec.pop().unwrap()
+        self.sp -= 1;
+        self.arr[self.sp as usize]
     }
 
     pub fn push(&mut self, n: u32) {
-        self.vec.push(n);
+        self.arr[self.sp as usize] = n;
+        self.sp += 1;
     }
 
     pub fn swap(&mut self) {
-        let len = self.vec.len();
-        self.vec.swap(len - 1, len - 2);
+        let tmp = self.arr[(self.sp - 1) as usize];
+        self.arr[(self.sp - 1) as usize] = self.arr[(self.sp - 2) as usize];
+        self.arr[(self.sp - 2) as usize] = tmp;
     }
 }
 
 pub struct LocalVariables {
-    vec: Vec<u32>,
+    arr: [u32; 255],
 }
 
 impl LocalVariables {
-    pub fn new(size: usize) -> LocalVariables {
-        LocalVariables { vec: vec![0; size] }
+    pub fn new() -> Self {
+        Self { arr: [0; 255] }
     }
 
     pub fn store(&mut self, address: u8, value: u32) {
-        self.vec.insert(address as usize, value);
+        self.arr[address as usize] = value;
     }
 
     pub fn store2(&mut self, address: u8, value1: u32, value2: u32) {
-        self.vec.insert(address as usize, value1);
-        self.vec.insert(address as usize + 1, value2);
+        self.arr[address as usize] = value1;
+        self.arr[address as usize + 1] = value2;
     }
 
     pub fn load(&self, address: u8) -> u32 {
-        self.vec[address as usize]
+        self.arr[address as usize]
     }
     pub fn load2(&self, address: u8) -> (u32, u32) {
-        (self.vec[address as usize], self.vec[address as usize + 1])
+        (self.arr[address as usize], self.arr[address as usize + 1])
     }
 }
 
@@ -69,7 +76,7 @@ mod tests {
 
     #[test]
     fn local_vars() {
-        let mut vars = LocalVariables::new(10);
+        let mut vars = LocalVariables::new();
 
         vars.store(1, 546);
         vars.store(2, 100);

@@ -1,4 +1,7 @@
-use coldsquare::{display_class, parse_class_file};
+use crate::ui::display_class;
+use file_parser::parse_class_file;
+
+mod ui;
 
 fn main() {
     let file = std::env::args().nth(1).unwrap_or_else(|| {
