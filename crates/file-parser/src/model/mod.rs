@@ -4,7 +4,7 @@
 //! [The .class specs](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html)
 #![allow(dead_code)]
 
-use crate::parse::ParseErr;
+use crate::ParseErr;
 use std::marker::PhantomData;
 
 /// All of the Constants in the Constant Pool

@@ -37,7 +37,7 @@ fn data_u4() {
 
 #[test]
 fn parse_empty_class() {
-    let class = include_bytes!("../../testdata/Test.class");
+    let class = include_bytes!("../../../testdata/Test.class");
     let parsed = parse_class_file(class).unwrap();
 
     assert_eq!(parsed.minor_version, 0);
@@ -70,21 +70,18 @@ fn parse_empty_class() {
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 0x10,
                     bytes: "java/lang/Object".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 6,
                     bytes: "<init>".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 3,
                     bytes: "()V".to_string()
                 })
             },
@@ -97,35 +94,30 @@ fn parse_empty_class() {
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 4,
                     bytes: "Test".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 4,
                     bytes: "Code".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 15,
                     bytes: "LineNumberTable".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 10,
                     bytes: "SourceFile".to_string()
                 })
             },
             CpInfo {
                 tag: 1,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    length: 9,
                     bytes: "Test.java".to_string()
                 })
             }
@@ -147,7 +139,7 @@ fn parse_empty_class() {
 
 #[test]
 fn more_complex_file() {
-    let class = include_bytes!("../../testdata/Test2.class");
+    let class = include_bytes!("../../../testdata/Test2.class");
     let parsed = parse_class_file(class).unwrap();
     assert_eq!(parsed.magic, 0xCAFEBABE);
 }

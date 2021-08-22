@@ -49,7 +49,7 @@ impl LocalVariables {
 
 #[cfg(test)]
 mod tests {
-    use crate::execute::model::{LocalVariables, OperandStack};
+    use super::{LocalVariables, OperandStack};
 
     #[test]
     fn operand_stack() {

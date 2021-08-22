@@ -1,4 +1,4 @@
-use crate::parse::{ClassFile, ParseErr};
+use file_parser::{ClassFile, ParseErr};
 use std::error::Error;
 use std::io::Write;
 
@@ -40,13 +40,13 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         }
     )?;
 
-    writeln!(w, " Class Attributes:")?;
+    writeln!(w, " Attributes:")?;
     for attr in &class.attributes {
         writeln!(w, "  {}", &attr.attribute_name_index.get(cp)?)?;
     }
     writeln!(w)?;
 
-    writeln!(w, " Class Fields:")?;
+    writeln!(w, " Fields:")?;
     for field in &class.fields {
         writeln!(
             w,
@@ -57,7 +57,7 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
     }
     writeln!(w)?;
 
-    writeln!(w, " Class Methods:")?;
+    writeln!(w, " Methods:")?;
     for method in &class.methods {
         writeln!(
             w,
