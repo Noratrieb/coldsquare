@@ -37,7 +37,7 @@ impl<'a> Data<'a> {
     fn u1(&mut self) -> Result<u1> {
         let item = self.data.get(self.pointer).cloned();
         self.pointer += 1;
-        item.ok_or(ParseErr("No u1 left".to_string()))
+        item.ok_or_else(|| ParseErr("No u1 left".to_string()))
     }
 
     fn u2(&mut self) -> Result<u2> {
@@ -56,7 +56,7 @@ impl<'a> Data<'a> {
         self.data
             .get(self.pointer - 1)
             .cloned()
-            .ok_or(ParseErr("Last u1 not found".to_string()))
+            .ok_or_else(|| ParseErr("Last u1 not found".to_string()))
     }
 
     fn last_u2(&self) -> Result<u2> {
@@ -64,7 +64,7 @@ impl<'a> Data<'a> {
             .data
             .get(self.pointer - 2)
             .cloned()
-            .ok_or(ParseErr("Last u2 not found".to_string()))?;
+            .ok_or_else(|| ParseErr("Last u2 not found".to_string()))?;
         Ok(((last2u1 as u2) << 8) | self.last_u1()? as u2)
     }
 
@@ -73,12 +73,12 @@ impl<'a> Data<'a> {
             .data
             .get(self.pointer - 3)
             .cloned()
-            .ok_or(ParseErr("Last 2 u1 in last u4 not found".to_string()))?;
+            .ok_or_else(|| ParseErr("Last 2 u1 in last u4 not found".to_string()))?;
         let last3u1 = self
             .data
             .get(self.pointer - 4)
             .cloned()
-            .ok_or(ParseErr("Last 3 u1 in last u4 not found".to_string()))?;
+            .ok_or_else(|| ParseErr("Last 3 u1 in last u4 not found".to_string()))?;
         Ok(((last3u1 as u4) << 24) | ((last2u1 as u4) << 16) | self.last_u2()? as u4)
     }
 }
@@ -257,7 +257,7 @@ impl Parse for CpInfo {
                     name_and_type_index: data.cp()?,
                 }),
             },
-            _ => Err(ParseErr(format!("Invalid CPInfo tag: {}", tag)))?,
+            _ => return Err(ParseErr(format!("Invalid CPInfo tag: {}", tag))),
         })
     }
 }
@@ -341,10 +341,12 @@ impl Parse for StackMapFrame {
                 locals: parse_vec(data.u2()?, data)?,
                 stack: parse_vec(data.u2()?, data)?,
             },
-            _ => Err(ParseErr(format!(
-                "Invalid StackMapFrame type: {}",
-                frame_type
-            )))?,
+            _ => {
+                return Err(ParseErr(format!(
+                    "Invalid StackMapFrame type: {}",
+                    frame_type
+                )))
+            }
         })
     }
 }
@@ -368,10 +370,12 @@ impl Parse for VerificationTypeInfo {
                 tag,
                 offset: data.u2()?,
             },
-            _ => Err(ParseErr(format!(
-                "Invalid VerificationTypeInfo tag: {}",
-                tag
-            )))?,
+            _ => {
+                return Err(ParseErr(format!(
+                    "Invalid VerificationTypeInfo tag: {}",
+                    tag
+                )))
+            }
         })
     }
 }
@@ -454,10 +458,12 @@ impl Parse for AnnotationElementValueValue {
             '[' => Self::ArrayValue {
                 values: parse_vec(data.u2()?, data)?,
             },
-            _ => Err(ParseErr(format!(
-                "Invalid AnnotationElementValueValue tag: {}",
-                tag
-            )))?,
+            _ => {
+                return Err(ParseErr(format!(
+                    "Invalid AnnotationElementValueValue tag: {}",
+                    tag
+                )))
+            }
         })
     }
 }
@@ -544,7 +550,7 @@ impl AttributeInfo {
             _ => return Err(ParseErr("Constant Pool index out of Bounds".to_string())),
         };
 
-        let mut data = Data::new(&content);
+        let mut data = Data::new(content);
         self.resolve_attribute_inner(index, len, info, &mut data, pool)
     }
 

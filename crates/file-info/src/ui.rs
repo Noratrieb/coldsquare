@@ -17,7 +17,7 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         w,
         "class {} extends {}{} {{",
         &class.this_class.get(cp)?.name_index.get(cp)?,
-        if class.interfaces.len() == 0 {
+        if class.interfaces.is_empty() {
             "".to_string()
         } else {
             format!(
@@ -36,7 +36,7 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         },
         match class.super_class.get(cp)? {
             None => "<none>",
-            Some(class) => &class.name_index.get(cp)?,
+            Some(class) => class.name_index.get(cp)?,
         }
     )?;
 
