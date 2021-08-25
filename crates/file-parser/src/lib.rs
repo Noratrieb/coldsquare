@@ -2,6 +2,7 @@ mod model;
 #[cfg(test)]
 mod test;
 
+use crate::cp_info::FromCpInfo;
 pub use model::*;
 use std::fmt::{Display, Formatter};
 
@@ -26,7 +27,7 @@ struct Data<'a> {
 
 pub fn parse_class_file(data: &[u1]) -> Result<ClassFile> {
     let mut data = Data::new(data);
-    ClassFile::parse(&mut data)
+    ClassFile::parse(&mut data, &[])
 }
 
 impl<'a> Data<'a> {
@@ -44,8 +45,11 @@ impl<'a> Data<'a> {
         Ok(((self.u1()? as u2) << 8) | self.u1()? as u2)
     }
 
-    fn cp<T>(&mut self) -> Result<FromPool<T>> {
-        Ok(self.u2()?.into())
+    /// Parses a u2 and validates it in the constant pool
+    fn cp<'pool, T: FromCpInfo<'pool>>(&mut self, pool: &'pool [CpInfo]) -> Result<FromPool<T>> {
+        let index = self.u2()?;
+        let _ = T::try_from_cp_info(pool, index)?;
+        Ok(index.into())
     }
 
     fn u4(&mut self) -> Result<u4> {
@@ -84,16 +88,16 @@ impl<'a> Data<'a> {
 }
 
 trait Parse {
-    fn parse(data: &mut Data) -> Result<Self>
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self>
     where
         Self: Sized;
 }
 
-fn parse_vec<T: Parse, S: Into<usize>>(len: S, data: &mut Data) -> Result<Vec<T>> {
+fn parse_vec<T: Parse, S: Into<usize>>(len: S, data: &mut Data, cp: &[CpInfo]) -> Result<Vec<T>> {
     let len = len.into();
     let mut vec = Vec::with_capacity(len);
     for _ in 0..len {
-        vec.push(T::parse(data)?);
+        vec.push(T::parse(data, cp)?);
     }
     Ok(vec)
 }
@@ -101,7 +105,7 @@ fn parse_vec<T: Parse, S: Into<usize>>(len: S, data: &mut Data) -> Result<Vec<T>
 macro_rules! parse_primitive {
     ($($value:ident),*) => {
         $(impl Parse for $value {
-            fn parse(data: &mut Data) -> Result<Self>
+            fn parse(data: &mut Data, _cp: &[CpInfo]) -> Result<Self>
             where
                 Self: Sized,
             {
@@ -114,25 +118,26 @@ macro_rules! parse_primitive {
 parse_primitive!(u1, u2, u4);
 
 impl<T> Parse for FromPool<T> {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(data.u2()?.into())
     }
 }
 
 impl Parse for ClassFile {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let magic = data.u4()?;
         assert_eq!(magic, 0xCAFEBABE);
         let minor_version = data.u2()?;
         let major_version = data.u2()?;
-        let constant_pool = parse_vec(data.u2()? - 1, data)?; // the minus one is important
+        let constant_pool = parse_vec(data.u2()? - 1, data, cp)?; // the minus one is important
+        let cp = &constant_pool;
         let access_flags = data.u2()?;
-        let this_class = data.cp()?;
-        let super_class = data.cp()?;
-        let interfaces = parse_vec(data.u2()?, data)?;
-        let fields = parse_vec(data.u2()?, data)?;
-        let methods = parse_vec(data.u2()?, data)?;
-        let attributes = parse_vec(data.u2()?, data)?;
+        let this_class = data.cp(cp)?;
+        let super_class = data.cp(cp)?;
+        let interfaces = parse_vec(data.u2()?, data, cp)?;
+        let fields = parse_vec(data.u2()?, data, cp)?;
+        let methods = parse_vec(data.u2()?, data, cp)?;
+        let attributes = parse_vec(data.u2()?, data, cp)?;
 
         let mut class = Self {
             magic,
@@ -153,41 +158,41 @@ impl Parse for ClassFile {
 }
 
 impl Parse for CpInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let tag = data.u1()?;
 
         Ok(match tag {
             7 => Self {
                 tag,
                 inner: CpInfoInner::Class(cp_info::Class {
-                    name_index: data.cp()?,
+                    name_index: data.cp(cp)?,
                 }),
             },
             9 => Self {
                 tag,
                 inner: CpInfoInner::Fieldref(cp_info::Fieldref {
-                    class_index: data.cp()?,
-                    name_and_type_index: data.cp()?,
+                    class_index: data.cp(cp)?,
+                    name_and_type_index: data.cp(cp)?,
                 }),
             },
             10 => Self {
                 tag,
                 inner: CpInfoInner::MethodRef(cp_info::MethodRef {
-                    class_index: data.cp()?,
-                    name_and_type_index: data.cp()?,
+                    class_index: data.cp(cp)?,
+                    name_and_type_index: data.cp(cp)?,
                 }),
             },
             11 => Self {
                 tag,
                 inner: CpInfoInner::InterfaceMethodref(cp_info::InterfaceMethodref {
-                    class_index: data.cp()?,
-                    name_and_type_index: data.cp()?,
+                    class_index: data.cp(cp)?,
+                    name_and_type_index: data.cp(cp)?,
                 }),
             },
             8 => Self {
                 tag,
                 inner: CpInfoInner::String(cp_info::String {
-                    string_index: data.cp()?,
+                    string_index: data.cp(cp)?,
                 }),
             },
             3 => Self {
@@ -215,14 +220,14 @@ impl Parse for CpInfo {
             12 => Self {
                 tag,
                 inner: CpInfoInner::NameAndType(cp_info::NameAndType {
-                    name_index: data.cp()?,
-                    descriptor_index: data.cp()?,
+                    name_index: data.cp(cp)?,
+                    descriptor_index: data.cp(cp)?,
                 }),
             },
             1 => Self {
                 tag,
                 inner: CpInfoInner::Utf8(cp_info::Utf8 {
-                    bytes: String::from_utf8(parse_vec(data.u2()?, data)?).map_err(|err| {
+                    bytes: String::from_utf8(parse_vec(data.u2()?, data, cp)?).map_err(|err| {
                         ParseErr(format!("Invalid utf8 in CpInfo::Utf8: {}", err))
                     })?,
                 }),
@@ -232,9 +237,9 @@ impl Parse for CpInfo {
                 inner: CpInfoInner::MethodHandle(cp_info::MethodHandle {
                     reference_kind: data.u1()?,
                     reference_index: match data.last_u1()? {
-                        1..=4 => cp_info::MethodHandleIndex::Field(data.cp()?),
-                        5..=8 => cp_info::MethodHandleIndex::Method(data.cp()?),
-                        9 => cp_info::MethodHandleIndex::Interface(data.cp()?),
+                        1..=4 => cp_info::MethodHandleIndex::Field(data.cp(cp)?),
+                        5..=8 => cp_info::MethodHandleIndex::Method(data.cp(cp)?),
+                        9 => cp_info::MethodHandleIndex::Interface(data.cp(cp)?),
                         n => {
                             return Err(ParseErr(format!(
                                 "Invalid MethodHandle reference kind: {}",
@@ -247,14 +252,14 @@ impl Parse for CpInfo {
             16 => Self {
                 tag,
                 inner: CpInfoInner::MethodType(cp_info::MethodType {
-                    descriptor_index: data.cp()?,
+                    descriptor_index: data.cp(cp)?,
                 }),
             },
             18 => Self {
                 tag,
                 inner: CpInfoInner::InvokeDynamic(cp_info::InvokeDynamic {
                     bootstrap_method_attr_index: data.u2()?,
-                    name_and_type_index: data.cp()?,
+                    name_and_type_index: data.cp(cp)?,
                 }),
             },
             _ => Err(ParseErr(format!("Invalid CPInfo tag: {}", tag)))?,
@@ -263,41 +268,41 @@ impl Parse for CpInfo {
 }
 
 impl Parse for FieldInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
-            name_index: data.cp()?,
-            descriptor_index: data.cp()?,
-            attributes: parse_vec(data.u2()?, data)?,
+            name_index: data.cp(cp)?,
+            descriptor_index: data.cp(cp)?,
+            attributes: parse_vec(data.u2()?, data, cp)?,
         })
     }
 }
 
 impl Parse for MethodInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             access_flags: data.u2()?,
-            name_index: data.cp()?,
-            descriptor_index: data.cp()?,
-            attributes: parse_vec(data.u2()?, data)?,
+            name_index: data.cp(cp)?,
+            descriptor_index: data.cp(cp)?,
+            attributes: parse_vec(data.u2()?, data, cp)?,
         })
     }
 }
 
 impl Parse for AttributeInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            attribute_name_index: data.cp()?,
+            attribute_name_index: data.cp(cp)?,
             attribute_length: data.u4()?,
             inner: AttributeInfoInner::Unknown {
-                attribute_content: parse_vec(data.last_u4()? as usize, data)?,
+                attribute_content: parse_vec(data.last_u4()? as usize, data, cp)?,
             },
         })
     }
 }
 
 impl Parse for AttributeCodeException {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             start_pc: data.last_u2()?,
             end_pc: data.last_u2()?,
@@ -308,19 +313,19 @@ impl Parse for AttributeCodeException {
 }
 
 impl Parse for StackMapFrame {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let frame_type = data.u1()?;
 
         Ok(match frame_type {
             0..=63 => Self::SameFrame { frame_type },
             64..=127 => Self::SameLocals1StackItemFrame {
                 frame_type,
-                stack: VerificationTypeInfo::parse(data)?,
+                stack: VerificationTypeInfo::parse(data, cp)?,
             },
             247 => Self::SameLocals1StackItemFrameExtended {
                 frame_type,
                 offset_delta: data.u2()?,
-                stack: VerificationTypeInfo::parse(data)?,
+                stack: VerificationTypeInfo::parse(data, cp)?,
             },
             246..=250 => Self::ChopFrame {
                 frame_type,
@@ -333,13 +338,13 @@ impl Parse for StackMapFrame {
             252..=254 => Self::AppendFrame {
                 frame_type,
                 offset_delta: data.u2()?,
-                locals: parse_vec(data.last_u2()?, data)?,
+                locals: parse_vec(data.last_u2()?, data, cp)?,
             },
             255 => Self::FullFrame {
                 frame_type,
                 offset_delta: data.u2()?,
-                locals: parse_vec(data.u2()?, data)?,
-                stack: parse_vec(data.u2()?, data)?,
+                locals: parse_vec(data.u2()?, data, cp)?,
+                stack: parse_vec(data.u2()?, data, cp)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid StackMapFrame type: {}",
@@ -350,7 +355,7 @@ impl Parse for StackMapFrame {
 }
 
 impl Parse for VerificationTypeInfo {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let tag = data.u1()?;
         Ok(match tag {
             0 => Self::Top { tag },
@@ -377,18 +382,18 @@ impl Parse for VerificationTypeInfo {
 }
 
 impl Parse for AttributeInnerClass {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            inner_class_info_index: data.cp()?,
-            outer_class_info_index: data.cp()?,
-            inner_class_name_index: data.cp()?,
+            inner_class_info_index: data.cp(cp)?,
+            outer_class_info_index: data.cp(cp)?,
+            inner_class_name_index: data.cp(cp)?,
             inner_class_access_flags: data.u2()?,
         })
     }
 }
 
 impl Parse for AttributeLineNumber {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             line_number: data.u2()?,
@@ -397,62 +402,64 @@ impl Parse for AttributeLineNumber {
 }
 
 impl Parse for AttributeLocalVariableTable {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             length: data.u2()?,
-            name_index: data.cp()?,
-            descriptor_or_signature_index: data.cp()?,
+            name_index: data.cp(cp)?,
+            descriptor_or_signature_index: data.cp(cp)?,
             index: data.u2()?,
         })
     }
 }
 
 impl Parse for Annotation {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            type_index: data.cp()?,
+            type_index: data.cp(cp)?,
             num_element_value_pairs: data.u2()?,
-            element_value_pairs: parse_vec(data.last_u2()?, data)?,
+            element_value_pairs: parse_vec(data.last_u2()?, data, cp)?,
         })
     }
 }
 
 impl Parse for AnnotationElementValuePair {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            element_name_index: data.cp()?,
-            element_name_name: AnnotationElementValue::parse(data)?,
+            element_name_index: data.cp(cp)?,
+            element_name_name: AnnotationElementValue::parse(data, cp)?,
         })
     }
 }
 
 impl Parse for AnnotationElementValue {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             tag: data.u1()?,
-            value: AnnotationElementValueValue::parse(data)?,
+            value: AnnotationElementValueValue::parse(data, cp)?,
         })
     }
 }
 
 impl Parse for AnnotationElementValueValue {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let tag = data.last_u1()? as char;
         Ok(match tag {
-            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' | 's' => {
-                Self::ConstValueIndex { index: data.cp()? }
-            }
-            'e' => Self::EnumConstValue {
-                type_name_index: data.cp()?,
-                const_name_index: data.cp()?,
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' | 's' => Self::ConstValueIndex {
+                index: data.u2()?.into(),
             },
-            'c' => Self::ClassInfoIndex { index: data.cp()? },
+            'e' => Self::EnumConstValue {
+                type_name_index: data.cp(cp)?,
+                const_name_index: data.cp(cp)?,
+            },
+            'c' => Self::ClassInfoIndex {
+                index: data.cp(cp)?,
+            },
             '@' => Self::AnnotationValue {
-                annotation: Box::new(Annotation::parse(data)?),
+                annotation: Box::new(Annotation::parse(data, cp)?),
             },
             '[' => Self::ArrayValue {
-                values: parse_vec(data.u2()?, data)?,
+                values: parse_vec(data.u2()?, data, cp)?,
             },
             _ => Err(ParseErr(format!(
                 "Invalid AnnotationElementValueValue tag: {}",
@@ -463,18 +470,18 @@ impl Parse for AnnotationElementValueValue {
 }
 
 impl Parse for ParameterAnnotation {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            annotations: parse_vec(data.u2()?, data)?,
+            annotations: parse_vec(data.u2()?, data, cp)?,
         })
     }
 }
 
 impl Parse for BootstrapMethod {
-    fn parse(data: &mut Data) -> Result<Self> {
+    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
-            bootstrap_method_ref: data.cp()?,
-            bootstrap_arguments: parse_vec(data.u2()?, data)?,
+            bootstrap_method_ref: data.cp(cp)?,
+            bootstrap_arguments: parse_vec(data.u2()?, data, cp)?,
         })
     }
 }
@@ -535,7 +542,7 @@ impl AttributeInfo {
             } => (attribute_name_index, attribute_length, attribute_content),
             _ => unreachable!("Attribute already resolved"),
         };
-        let info = match pool.get((*index) as usize - 1) {
+        let info = match pool.get((index.inner()) as usize - 1) {
             Some(CpInfo {
                 inner: CpInfoInner::Utf8(cp_info::Utf8 { bytes, .. }),
                 ..
@@ -554,7 +561,7 @@ impl AttributeInfo {
         attribute_length: u32,
         name: &str,
         data: &mut Data,
-        pool: &[CpInfo],
+        cp: &[CpInfo],
     ) -> Result<()> {
         let _ = std::mem::replace(
             self,
@@ -563,7 +570,7 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::ConstantValue {
-                        constantvalue_index: data.cp()?,
+                        constantvalue_index: data.cp(cp)?,
                     },
                 },
                 "Code" => {
@@ -573,9 +580,9 @@ impl AttributeInfo {
                         inner: AttributeInfoInner::Code {
                             max_stack: data.u2()?,
                             max_locals: data.u2()?,
-                            code: parse_vec(data.u4()? as usize, data)?,
-                            exception_table: parse_vec(data.u2()?, data)?,
-                            attributes: parse_vec(data.u2()?, data)?,
+                            code: parse_vec(data.u4()? as usize, data, cp)?,
+                            exception_table: parse_vec(data.u2()?, data, cp)?,
+                            attributes: parse_vec(data.u2()?, data, cp)?,
                         },
                     };
                     if let AttributeInfoInner::Code {
@@ -584,7 +591,7 @@ impl AttributeInfo {
                     {
                         attributes
                             .iter_mut()
-                            .map(|attr| attr.resolve_attribute(pool))
+                            .map(|attr| attr.resolve_attribute(cp))
                             .collect::<Result<Vec<()>>>()?;
                     } else {
                         unreachable!()
@@ -596,29 +603,29 @@ impl AttributeInfo {
                     attribute_length,
                     inner: AttributeInfoInner::StackMapTable {
                         number_of_entries: data.u2()?,
-                        entries: parse_vec(data.last_u2()?, data)?,
+                        entries: parse_vec(data.last_u2()?, data, cp)?,
                     },
                 },
                 "Exceptions" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::Exceptions {
-                        exception_index_table: parse_vec(data.u2()?, data)?,
+                        exception_index_table: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "InnerClasses" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::InnerClasses {
-                        classes: parse_vec(data.u2()?, data)?,
+                        classes: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "EnclosingMethod" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::EnclosingMethod {
-                        class_index: data.cp()?,
-                        method_index: data.cp()?,
+                        class_index: data.cp(cp)?,
+                        method_index: data.cp(cp)?,
                     },
                 },
                 "Synthetic" => Self {
@@ -630,42 +637,42 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::Signature {
-                        signature_index: data.cp()?,
+                        signature_index: data.cp(cp)?,
                     },
                 },
                 "SourceFile" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::SourceFile {
-                        sourcefile_index: data.cp()?,
+                        sourcefile_index: data.cp(cp)?,
                     },
                 },
                 "SourceDebugExtension" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::SourceDebugExtension {
-                        debug_extension: parse_vec(data.last_u2()?, data)?,
+                        debug_extension: parse_vec(data.last_u2()?, data, cp)?,
                     },
                 },
                 "LineNumberTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LineNumberTable {
-                        line_number_table: parse_vec(data.u2()?, data)?,
+                        line_number_table: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "LocalVariableTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LocalVariableTable {
-                        local_variable_table: parse_vec(data.u2()?, data)?,
+                        local_variable_table: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "LocalVariableTypeTable" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::LocalVariableTypeTable {
-                        local_variable_table: parse_vec(data.u2()?, data)?,
+                        local_variable_table: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "Deprecated" => Self {
@@ -677,28 +684,28 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeVisibleAnnotations {
-                        annotations: parse_vec(data.u2()?, data)?,
+                        annotations: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "RuntimeInvisibleAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeInvisibleAnnotations {
-                        annotations: parse_vec(data.u2()?, data)?,
+                        annotations: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 "RuntimeVisibleParameterAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeVisibleParameterAnnotations {
-                        parameter_annotations: parse_vec(data.u1()?, data)?,
+                        parameter_annotations: parse_vec(data.u1()?, data, cp)?,
                     },
                 },
                 "RuntimeInvisibleParameterAnnotations" => Self {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::RuntimeInvisibleParameterAnnotations {
-                        parameter_annotations: parse_vec(data.u1()?, data)?,
+                        parameter_annotations: parse_vec(data.u1()?, data, cp)?,
                     },
                 },
                 "AnnotationDefault" => Self {
@@ -707,7 +714,7 @@ impl AttributeInfo {
                     inner: AttributeInfoInner::AnnotationDefault {
                         default_value: AnnotationElementValue {
                             tag: data.u1()?,
-                            value: AnnotationElementValueValue::parse(data)?,
+                            value: AnnotationElementValueValue::parse(data, cp)?,
                         },
                     },
                 },
@@ -715,7 +722,7 @@ impl AttributeInfo {
                     attribute_name_index,
                     attribute_length,
                     inner: AttributeInfoInner::BootstrapMethods {
-                        bootstrap_methods: parse_vec(data.u2()?, data)?,
+                        bootstrap_methods: parse_vec(data.u2()?, data, cp)?,
                     },
                 },
                 name => return Err(ParseErr(format!("Invalid Attribute name: {}", name))),

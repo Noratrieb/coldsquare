@@ -1,8 +1,12 @@
 use super::*;
+use crate::ParseErr;
 
 ///
 /// An index into the constant pool of the class
 /// `T` -> What type the target value is supposed to be. Create an enum if multiple values can be there
+///
+/// The value this is pointing at must *always* be a entry of the correct type T
+/// Type checking is done at parse time, so that the value can be get with minimal overhead
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FromPool<T> {
@@ -13,14 +17,6 @@ pub struct FromPool<T> {
 // could probably be derived if I chose a better marker
 impl<T: Clone> Copy for FromPool<T> {}
 
-impl<T> std::ops::Deref for FromPool<T> {
-    type Target = u2;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
 impl<T> From<u2> for FromPool<T> {
     fn from(n: u2) -> Self {
         Self {
@@ -30,40 +26,63 @@ impl<T> From<u2> for FromPool<T> {
     }
 }
 
-pub trait FromCpInfo<'a> {
-    type Target;
-    fn from_cp_info(info: &'a CpInfo) -> Result<Self::Target, ParseErr>;
-}
-
-impl<'a, T> FromCpInfo<'a> for Option<T>
-where
-    T: FromCpInfo<'a, Target = &'a T>,
-    T: 'a,
-{
-    type Target = Option<&'a T>;
-
-    fn from_cp_info(info: &'a CpInfo) -> Result<Self::Target, ParseErr> {
-        Ok(T::from_cp_info(info).ok())
+impl<T> FromPool<T> {
+    #[inline]
+    pub const fn inner(&self) -> u2 {
+        self.inner
     }
 }
 
-impl<'a, T> FromPool<T>
+impl<'pool, T> FromPool<T>
 where
-    T: FromCpInfo<'a>,
+    T: FromCpInfo<'pool>,
 {
-    pub fn get(&self, pool: &'a [CpInfo]) -> Result<T::Target, ParseErr> {
+    #[inline]
+    pub fn get(&self, pool: &'pool [CpInfo]) -> T::Target {
         T::from_cp_info(&pool[self.inner as usize - 1])
     }
+}
+
+impl<'pool, T> FromPool<Option<T>>
+where
+    T: FromCpInfo<'pool>,
+{
+    #[inline]
+    pub fn maybe_get(&self, pool: &'pool [CpInfo]) -> Option<T::Target> {
+        if self.inner == 0 {
+            None
+        } else {
+            Some(T::from_cp_info(&pool[self.inner as usize - 1]))
+        }
+    }
+}
+
+pub trait FromCpInfo<'pool> {
+    type Target;
+    fn from_cp_info(info: &'pool CpInfo) -> Self::Target;
+    fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr>;
 }
 
 macro_rules! impl_try_from_cp {
     ($($name:ident),*) => {
         $(
-            impl<'a> FromCpInfo<'a> for $name {
-                type Target = &'a Self;
+            impl<'pool> FromCpInfo<'pool> for $name {
+                type Target = &'pool Self;
 
-                fn from_cp_info(info: &'a CpInfo) -> Result<Self::Target, ParseErr> {
+                #[inline]
+                fn from_cp_info(info: &'pool CpInfo) -> Self::Target {
                     match &info.inner {
+                        CpInfoInner::$name(class) => class,
+                        _kind => unreachable!(),
+                    }
+                }
+
+                #[inline]
+                fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr> {
+                    if index == 0 {
+                        return Err(ParseErr("Index must not be 0".to_string()));
+                    }
+                    match &info[index as usize - 1].inner {
                         CpInfoInner::$name(class) => Ok(class),
                         kind => Err(ParseErr(format!(
                             concat!("Expected '", stringify!($name), "', found '{:?}'"),
@@ -206,11 +225,23 @@ impl_try_from_cp!(
 );
 
 // custom implementations
-impl<'a> FromCpInfo<'a> for Utf8 {
-    type Target = &'a str;
+impl<'pool> FromCpInfo<'pool> for Utf8 {
+    type Target = &'pool str;
 
-    fn from_cp_info(info: &'a CpInfo) -> Result<Self::Target, ParseErr> {
+    #[inline]
+    fn from_cp_info(info: &'pool CpInfo) -> Self::Target {
         match &info.inner {
+            CpInfoInner::Utf8(class) => &class.bytes,
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline]
+    fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr> {
+        if index == 0 {
+            return Err(ParseErr("Index must not be 0".to_string()));
+        }
+        match &info[index as usize - 1].inner {
             CpInfoInner::Utf8(class) => Ok(&class.bytes),
             kind => Err(ParseErr(format!(
                 concat!("Expected '", stringify!($name), "', found '{:?}'"),
