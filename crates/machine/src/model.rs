@@ -22,9 +22,8 @@ impl OperandStack {
     }
 
     pub fn swap(&mut self) {
-        let tmp = self.arr[(self.sp - 1) as usize];
-        self.arr[(self.sp - 1) as usize] = self.arr[(self.sp - 2) as usize];
-        self.arr[(self.sp - 2) as usize] = tmp;
+        self.arr
+            .swap((self.sp - 2) as usize, (self.sp - 2) as usize);
     }
 }
 

@@ -1,4 +1,4 @@
-use file_parser::ClassFile;
+use file_parser::{ClassFile, ParseErr};
 use std::error::Error;
 use std::io::Write;
 
@@ -17,11 +17,11 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         w,
         "class {} extends {}{} {{",
         &class.this_class.get(cp).name_index.get(cp),
-        match class.super_class.maybe_get(cp) {
+        match class.super_class.get(cp) {
             None => "<none>",
             Some(class) => &class.name_index.get(cp),
-        },
-        if class.interfaces.len() == 0 {
+        }
+        if class.interfaces.is_empty() {
             "".to_string()
         } else {
             format!(
@@ -31,8 +31,10 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
                     .interfaces
                     .iter()
                     .map(|i| i.get(cp))
+                    .collect::<Result<Vec<_>, ParseErr>>()?
+                    .iter()
                     .map(|i| i.name_index.get(cp))
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>, ParseErr>>()?
                     .join(",")
             )
         },
@@ -40,7 +42,7 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
 
     writeln!(w, " Attributes:")?;
     for attr in &class.attributes {
-        writeln!(w, "  {}", &attr.attribute_name_index.get(cp))?;
+        writeln!(w, "  {}", &attr.attribute_name_index.get(cp)?)?;
     }
     writeln!(w)?;
 
@@ -49,8 +51,8 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         writeln!(
             w,
             "  {} {}",
-            &field.descriptor_index.get(cp),
-            &field.name_index.get(cp)
+            &field.descriptor_index.get(cp)?,
+            &field.name_index.get(cp)?
         )?;
     }
     writeln!(w)?;
@@ -60,8 +62,8 @@ pub fn display_class<W: Write>(mut w: W, class: &ClassFile) -> Result<(), Box<dy
         writeln!(
             w,
             "  {} {}",
-            &method.descriptor_index.get(cp),
-            &method.name_index.get(cp),
+            &method.descriptor_index.get(cp)?,
+            &method.name_index.get(cp)?,
         )?;
     }
 

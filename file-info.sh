@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 cd crates/file-info
 cargo run ../../"$1"
