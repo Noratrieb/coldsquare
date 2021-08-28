@@ -159,7 +159,6 @@ impl ValidateCpInfo for CpInfoInner {
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Class {
-    /// Entry must be `Utf8`
     pub name_index: FromPool<Utf8>,
 }
 
@@ -167,7 +166,6 @@ pub struct Class {
 pub struct Fieldref {
     /// May be a class or interface type
     pub class_index: FromPool<Class>,
-    /// Entry must be `NameAndType`
     pub name_and_type_index: FromPool<NameAndType>,
 }
 
@@ -175,7 +173,6 @@ pub struct Fieldref {
 pub struct MethodRef {
     /// Must be a class type
     pub class_index: FromPool<Class>,
-    /// Entry must be `NameAndType`
     pub name_and_type_index: FromPool<NameAndType>,
 }
 
@@ -183,13 +180,11 @@ pub struct MethodRef {
 pub struct InterfaceMethodref {
     /// Must be an interface type
     pub class_index: FromPool<Class>,
-    /// Entry must be `NameAndType`
     pub name_and_type_index: FromPool<NameAndType>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct String {
-    /// Entry must be `Utf8`
     pub string_index: FromPool<Utf8>,
 }
 
@@ -226,9 +221,7 @@ pub struct Double {
 /// Any field or method, without the class it belongs to
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct NameAndType {
-    /// Entry must be `Utf8`
     pub name_index: FromPool<Utf8>,
-    /// Entry must be `Utf8`
     pub descriptor_index: FromPool<Utf8>,
 }
 
@@ -256,16 +249,31 @@ pub enum MethodHandleIndex {
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct MethodType {
-    /// Entry must be `Utf8`
     pub descriptor_index: FromPool<Utf8>,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct Dynamic {
+    /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class field
+    pub bootstrap_method_attr_index: u2,
+    pub name_and_type_index: FromPool<NameAndType>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct InvokeDynamic {
     /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class field
     pub bootstrap_method_attr_index: u2,
-    /// Entry must `NameAndType`
     pub name_and_type_index: FromPool<NameAndType>,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct Module {
+    pub name_index: FromPool<Utf8>,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct Package {
+    pub name_index: FromPool<Utf8>,
 }
 
 // default implementations
@@ -283,7 +291,10 @@ impl_try_from_cp!(
     NameAndType,
     MethodHandle,
     MethodType,
-    InvokeDynamic
+    Dynamic,
+    InvokeDynamic,
+    Module,
+    Package
 );
 
 impl ValidateCpInfo for Utf8 {
