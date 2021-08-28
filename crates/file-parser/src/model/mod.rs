@@ -4,8 +4,6 @@
 //! [The .class specs](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html)
 #![allow(dead_code)]
 
-use std::marker::PhantomData;
-
 /// All of the Constants in the Constant Pool
 pub mod cp_info;
 
@@ -118,15 +116,6 @@ pub struct AttributeInfo {
     pub inner: AttributeInfoInner,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum ConstantValueIndex {
-    Long(cp_info::Long),
-    Float(cp_info::Float),
-    Double(cp_info::Double),
-    Integer(cp_info::Integer),
-    String(cp_info::String),
-}
-
 /// The Attributes, without the two common fields
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum AttributeInfoInner {
@@ -138,7 +127,7 @@ pub enum AttributeInfoInner {
     /// Only on fields, the constant value of that field
     ConstantValue {
         /// Must be of type `Long`/`Float`/`Double`/`Integer`/`String`
-        constantvalue_index: FromPool<ConstantValueIndex>,
+        constantvalue_index: FromPool<CpInfoInner>,
     },
     /// Only on methods, contains JVM instructions and auxiliary information for a single method
     Code {

@@ -2,7 +2,7 @@ mod model;
 #[cfg(test)]
 mod test;
 
-use crate::cp_info::FromCpInfo;
+use crate::cp_info::ValidateCpInfo;
 pub use model::*;
 use std::fmt::{Display, Formatter};
 
@@ -46,9 +46,9 @@ impl<'a> Data<'a> {
     }
 
     /// Parses a u2 and validates it in the constant pool
-    fn cp<'pool, T: FromCpInfo<'pool>>(&mut self, pool: &'pool [CpInfo]) -> Result<FromPool<T>> {
+    fn cp<T: ValidateCpInfo>(&mut self, pool: &[CpInfo]) -> Result<FromPool<T>> {
         let index = self.u2()?;
-        let _ = T::try_from_cp_info(pool, index)?;
+        T::validate_cp_info(pool, index)?;
         Ok(index.into())
     }
 
@@ -117,9 +117,12 @@ macro_rules! parse_primitive {
 
 parse_primitive!(u1, u2, u4);
 
-impl<T> Parse for FromPool<T> {
+impl<T> Parse for FromPool<T>
+where
+    T: ValidateCpInfo,
+{
     fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
-        Ok(data.u2()?.into())
+        data.cp(cp)
     }
 }
 
@@ -129,7 +132,9 @@ impl Parse for ClassFile {
         assert_eq!(magic, 0xCAFEBABE);
         let minor_version = data.u2()?;
         let major_version = data.u2()?;
+        dbg!("reached constant pool");
         let constant_pool = parse_vec(data.u2()? - 1, data, cp)?; // the minus one is important
+        dbg!("after constant pool");
         let cp = &constant_pool;
         let access_flags = data.u2()?;
         let this_class = data.cp(cp)?;
@@ -160,6 +165,7 @@ impl Parse for ClassFile {
 impl Parse for CpInfo {
     fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let tag = data.u1()?;
+        dbg!(tag);
 
         Ok(match tag {
             7 => Self {
@@ -302,7 +308,7 @@ impl Parse for AttributeInfo {
 }
 
 impl Parse for AttributeCodeException {
-    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
+    fn parse(data: &mut Data, _cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             start_pc: data.last_u2()?,
             end_pc: data.last_u2()?,
@@ -357,7 +363,7 @@ impl Parse for StackMapFrame {
 }
 
 impl Parse for VerificationTypeInfo {
-    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
+    fn parse(data: &mut Data, _cp: &[CpInfo]) -> Result<Self> {
         let tag = data.u1()?;
         Ok(match tag {
             0 => Self::Top { tag },
@@ -397,7 +403,7 @@ impl Parse for AttributeInnerClass {
 }
 
 impl Parse for AttributeLineNumber {
-    fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
+    fn parse(data: &mut Data, _cp: &[CpInfo]) -> Result<Self> {
         Ok(Self {
             start_pc: data.u2()?,
             line_number: data.u2()?,

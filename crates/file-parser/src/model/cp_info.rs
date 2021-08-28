@@ -1,5 +1,5 @@
-use super::*;
-use crate::ParseErr;
+use crate::{u1, u2, u4, CpInfo, CpInfoInner, ParseErr};
+use std::marker::PhantomData;
 
 ///
 /// An index into the constant pool of the class
@@ -18,6 +18,7 @@ pub struct FromPool<T> {
 impl<T: Clone> Copy for FromPool<T> {}
 
 impl<T> From<u2> for FromPool<T> {
+    #[inline]
     fn from(n: u2) -> Self {
         Self {
             inner: n,
@@ -39,7 +40,7 @@ where
 {
     #[inline]
     pub fn get(&self, pool: &'pool [CpInfo]) -> T::Target {
-        T::from_cp_info(&pool[self.inner as usize - 1])
+        T::from_cp_info_with_index(pool, self.inner)
     }
 }
 
@@ -52,15 +53,56 @@ where
         if self.inner == 0 {
             None
         } else {
-            Some(T::from_cp_info(&pool[self.inner as usize - 1]))
+            Some(T::from_cp_info_with_index(pool, self.inner))
         }
     }
 }
 
-pub trait FromCpInfo<'pool> {
+pub trait ValidateCpInfo {
+    /// check that the constant pool entry has the correct type
+    /// `index` is the original, non-null index (it can be 0 optional constants)
+    fn validate_cp_info(info: &[CpInfo], index: u2) -> Result<(), ParseErr>;
+}
+
+pub trait FromCpInfo<'pool>: ValidateCpInfo {
     type Target;
     fn from_cp_info(info: &'pool CpInfo) -> Self::Target;
-    fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr>;
+    fn from_cp_info_with_index(info: &'pool [CpInfo], index: u2) -> Self::Target {
+        Self::from_cp_info(&info[index as usize - 1])
+    }
+}
+
+impl<'pool, T> FromCpInfo<'pool> for Option<T>
+where
+    T: FromCpInfo<'pool>,
+{
+    type Target = Option<T::Target>;
+
+    #[inline]
+    fn from_cp_info(_info: &'pool CpInfo) -> Self::Target {
+        unreachable!("FromPool<Option<T>> should always be get through `from_cp_info_with_index`")
+    }
+
+    fn from_cp_info_with_index(info: &'pool [CpInfo], index: u2) -> Self::Target {
+        if index == 0 {
+            None
+        } else {
+            Some(T::from_cp_info_with_index(info, index))
+        }
+    }
+}
+
+impl<T> ValidateCpInfo for Option<T>
+where
+    T: ValidateCpInfo,
+{
+    fn validate_cp_info(info: &[CpInfo], index: u2) -> Result<(), ParseErr> {
+        if index == 0 {
+            Ok(())
+        } else {
+            T::validate_cp_info(info, index)
+        }
+    }
 }
 
 macro_rules! impl_try_from_cp {
@@ -76,14 +118,20 @@ macro_rules! impl_try_from_cp {
                         _kind => unreachable!(),
                     }
                 }
+            }
 
-                #[inline]
-                fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr> {
+            impl ValidateCpInfo for $name {
+                fn validate_cp_info(info: &[CpInfo], index: u2) -> Result<(), ParseErr> {
                     if index == 0 {
                         return Err(ParseErr("Index must not be 0".to_string()));
                     }
+                    // todo this here might actually be an empty constant pool depending on whether is is still parsing the constant pool
+                    // it needs to be checked after testing
+                    // not now
+                    // pls
+                    // i hate this
                     match &info[index as usize - 1].inner {
-                        CpInfoInner::$name(class) => Ok(class),
+                        CpInfoInner::$name(_) => Ok(()),
                         kind => Err(ParseErr(format!(
                             concat!("Expected '", stringify!($name), "', found '{:?}'"),
                             kind
@@ -95,40 +143,54 @@ macro_rules! impl_try_from_cp {
     };
 }
 
+impl<'pool> FromCpInfo<'pool> for CpInfoInner {
+    type Target = &'pool Self;
+
+    fn from_cp_info(info: &'pool CpInfo) -> Self::Target {
+        &info.inner
+    }
+}
+
+impl ValidateCpInfo for CpInfoInner {
+    fn validate_cp_info(_info: &[CpInfo], _index: u2) -> Result<(), ParseErr> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Class {
     /// Entry must be `Utf8`
-    pub name_index: FromPool<cp_info::Utf8>,
+    pub name_index: FromPool<Utf8>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct Fieldref {
     /// May be a class or interface type
-    pub class_index: FromPool<cp_info::Class>,
+    pub class_index: FromPool<Class>,
     /// Entry must be `NameAndType`
-    pub name_and_type_index: FromPool<cp_info::NameAndType>,
+    pub name_and_type_index: FromPool<NameAndType>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MethodRef {
     /// Must be a class type
-    pub class_index: FromPool<cp_info::Class>,
+    pub class_index: FromPool<Class>,
     /// Entry must be `NameAndType`
-    pub name_and_type_index: FromPool<cp_info::NameAndType>,
+    pub name_and_type_index: FromPool<NameAndType>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct InterfaceMethodref {
     /// Must be an interface type
-    pub class_index: FromPool<cp_info::Class>,
+    pub class_index: FromPool<Class>,
     /// Entry must be `NameAndType`
-    pub name_and_type_index: FromPool<cp_info::NameAndType>,
+    pub name_and_type_index: FromPool<NameAndType>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct String {
     /// Entry must be `Utf8`
-    pub string_index: FromPool<cp_info::Utf8>,
+    pub string_index: FromPool<Utf8>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -165,9 +227,9 @@ pub struct Double {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct NameAndType {
     /// Entry must be `Utf8`
-    pub name_index: FromPool<cp_info::Utf8>,
+    pub name_index: FromPool<Utf8>,
     /// Entry must be `Utf8`
-    pub descriptor_index: FromPool<cp_info::Utf8>,
+    pub descriptor_index: FromPool<Utf8>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -187,15 +249,15 @@ pub struct MethodHandle {
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum MethodHandleIndex {
-    Field(FromPool<cp_info::Fieldref>),
-    Method(FromPool<cp_info::MethodInfo>),
-    Interface(FromPool<cp_info::InterfaceMethodref>),
+    Field(FromPool<Fieldref>),
+    Method(FromPool<MethodRef>),
+    Interface(FromPool<InterfaceMethodref>),
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct MethodType {
     /// Entry must be `Utf8`
-    pub descriptor_index: FromPool<cp_info::Utf8>,
+    pub descriptor_index: FromPool<Utf8>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -203,7 +265,7 @@ pub struct InvokeDynamic {
     /// Must be a valid index into the `bootstrap_methods` array of the bootstrap method table of this class field
     pub bootstrap_method_attr_index: u2,
     /// Entry must `NameAndType`
-    pub name_and_type_index: FromPool<cp_info::NameAndType>,
+    pub name_and_type_index: FromPool<NameAndType>,
 }
 
 // default implementations
@@ -224,6 +286,21 @@ impl_try_from_cp!(
     InvokeDynamic
 );
 
+impl ValidateCpInfo for Utf8 {
+    fn validate_cp_info(info: &[CpInfo], index: u2) -> Result<(), ParseErr> {
+        if index == 0 {
+            return Err(ParseErr("Index must not be 0".to_string()));
+        }
+        match &info[index as usize - 1].inner {
+            CpInfoInner::Utf8(_) => Ok(()),
+            kind => Err(ParseErr(format!(
+                concat!("Expected '", stringify!($name), "', found '{:?}'"),
+                kind
+            ))),
+        }
+    }
+}
+
 // custom implementations
 impl<'pool> FromCpInfo<'pool> for Utf8 {
     type Target = &'pool str;
@@ -233,20 +310,6 @@ impl<'pool> FromCpInfo<'pool> for Utf8 {
         match &info.inner {
             CpInfoInner::Utf8(class) => &class.bytes,
             _ => unreachable!(),
-        }
-    }
-
-    #[inline]
-    fn try_from_cp_info(info: &'pool [CpInfo], index: u2) -> Result<Self::Target, ParseErr> {
-        if index == 0 {
-            return Err(ParseErr("Index must not be 0".to_string()));
-        }
-        match &info[index as usize - 1].inner {
-            CpInfoInner::Utf8(class) => Ok(&class.bytes),
-            kind => Err(ParseErr(format!(
-                concat!("Expected '", stringify!($name), "', found '{:?}'"),
-                kind
-            ))),
         }
     }
 }
