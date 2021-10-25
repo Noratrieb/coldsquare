@@ -165,7 +165,6 @@ impl Parse for ClassFile {
 impl Parse for CpInfo {
     fn parse(data: &mut Data, cp: &[CpInfo]) -> Result<Self> {
         let tag = data.u1()?;
-        dbg!(tag);
 
         Ok(match tag {
             7 => Self {
@@ -261,11 +260,30 @@ impl Parse for CpInfo {
                     descriptor_index: data.cp(cp)?,
                 }),
             },
+            17 => Self {
+                tag,
+                inner: CpInfoInner::Dynamic(cp_info::Dynamic {
+                    bootstrap_method_attr_index: data.u2()?,
+                    name_and_type_index: data.cp(cp)?,
+                }),
+            },
             18 => Self {
                 tag,
                 inner: CpInfoInner::InvokeDynamic(cp_info::InvokeDynamic {
                     bootstrap_method_attr_index: data.u2()?,
                     name_and_type_index: data.cp(cp)?,
+                }),
+            },
+            19 => Self {
+                tag,
+                inner: CpInfoInner::Module(cp_info::Module {
+                    name_index: data.cp(cp)?,
+                }),
+            },
+            20 => Self {
+                tag,
+                inner: CpInfoInner::Package(cp_info::Package {
+                    name_index: data.cp(cp)?,
                 }),
             },
             _ => return Err(ParseErr(format!("Invalid CPInfo tag: {}", tag))),

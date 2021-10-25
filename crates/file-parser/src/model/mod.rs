@@ -2,6 +2,8 @@
 //! The models for a .class file
 //!
 //! [The .class specs](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html)
+//!
+//! todo poart to [SE16](https://docs.oracle.com/javase/specs/jvms/se16/html/jvms-4.html)
 #![allow(dead_code)]
 
 /// All of the Constants in the Constant Pool
@@ -74,7 +76,10 @@ pub enum CpInfoInner {
     Utf8(cp_info::Utf8),
     MethodHandle(cp_info::MethodHandle),
     MethodType(cp_info::MethodType),
+    Dynamic(cp_info::Dynamic),
     InvokeDynamic(cp_info::InvokeDynamic),
+    Module(cp_info::Module),
+    Package(cp_info::Package),
 }
 
 /// Information about a field
@@ -222,6 +227,14 @@ pub enum AttributeInfoInner {
     BootstrapMethods {
         bootstrap_methods: Vec<BootstrapMethod>,
     },
+    // todo
+    MethodParameters,
+    Module,
+    ModulePackages,
+    ModuleMainClass,
+    NestHost,
+    NestMembers,
+    Record,
 }
 
 /// An exception handler in the JVM bytecode array
@@ -450,6 +463,8 @@ pub enum ClassAccessFlag {
     Annotation = 0x2000,
     /// Declared as an enum type.
     Enum = 0x4000,
+    /// Is a module, not a class or interface.
+    MODULE = 0x8000,
 }
 
 /// Access Flags of a method
