@@ -1,0 +1,17 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build Test.class
+        run: javac testdata/Test.java
+
+      - name: Run
+        working-directory: crates/file-info/
+        run: cargo +nightly run ../../testdata/Test.class
