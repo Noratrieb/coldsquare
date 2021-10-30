@@ -8,12 +8,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      
-      - run: rustup toolchain install nightly
 
-      - name: Build Test.class
-        run: javac testdata/Test.java
-
-      - name: Run
+      - name: Build
         working-directory: crates/file-info/
-        run: cargo +nightly run ../../testdata/Test.class
+        run: cargo build
+
+      - name: Test
+        working-directory: crates/file-info/
+        run: cargo test
