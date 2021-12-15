@@ -1,4 +1,4 @@
-use file_parser::ClassFile;
+use cs_parser::ClassFile;
 use std::io;
 use std::io::Write;
 

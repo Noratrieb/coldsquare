@@ -25,6 +25,7 @@ struct Data<'a> {
     pointer: usize,
 }
 
+/// Parses the class file into a `ClassFile` structure
 pub fn parse_class_file(data: &[u1]) -> Result<ClassFile> {
     let mut data = Data::new(data);
     ClassFile::parse(&mut data, &[])

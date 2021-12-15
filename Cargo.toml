@@ -1,2 +1,16 @@
 [workspace]
-members = ["crates/*"]
+members = [
+    "cs_class_printer",
+    "cs_model",
+    "cs_parser",
+    "cs_vm",
+]
+
+[package]
+name = "coldsquare"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cs_class_printer = { path = "cs_class_printer" }
+cs_parser = { path = "cs_parser" }

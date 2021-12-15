@@ -37,7 +37,7 @@ fn data_u4() {
 
 #[test]
 fn parse_empty_class() {
-    let class = include_bytes!("../../../testdata/Test.class");
+    let class = include_bytes!("../testdata/Test.class");
     let parsed = parse_class_file(class).unwrap();
 
     assert_eq!(parsed.minor_version, 0);
@@ -139,7 +139,7 @@ fn parse_empty_class() {
 
 #[test]
 fn more_complex_file() {
-    let class = include_bytes!("../../../testdata/Test2.class");
+    let class = include_bytes!("../testdata/Test2.class");
     let parsed = parse_class_file(class).unwrap();
     assert_eq!(parsed.magic, 0xCAFEBABE);
 }

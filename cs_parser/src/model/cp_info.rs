@@ -125,6 +125,10 @@ macro_rules! impl_try_from_cp {
                     if index == 0 {
                         return Err(ParseErr("Index must not be 0".to_string()));
                     }
+
+                    if info.len() == 0 {
+                        return Ok(());
+                    }
                     // todo this here might actually be an empty constant pool depending on whether is is still parsing the constant pool
                     // it needs to be checked after testing
                     // not now
@@ -301,6 +305,9 @@ impl ValidateCpInfo for Utf8 {
     fn validate_cp_info(info: &[CpInfo], index: u2) -> Result<(), ParseErr> {
         if index == 0 {
             return Err(ParseErr("Index must not be 0".to_string()));
+        }
+        if info.len() == 0 {
+            return Ok(());
         }
         match &info[index as usize - 1].inner {
             CpInfoInner::Utf8(_) => Ok(()),

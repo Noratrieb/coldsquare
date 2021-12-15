@@ -1,0 +1,133 @@
+Manually parsed by hand
+
+hexdump -C Test.class
+
+00000000 |ca fe ba be|00 00|00 3b |00 0d|0a.00 02.00 03|07. |.......;........|
+00000010  00 04|0c.00 05.00 06|01 .00 10.6a 61 76 61 2f 6c  |..........java/l|
+00000020  61 6e 67 2f 4f 62 6a 65  63 74|01.00 06.3c 69 6e  |ang/Object...<in|
+00000030  69 74 3e|01.00 03.28 29  56|07.00 08|01.00 04.54  |it>...()V......T|
+00000040  65 73 74|01.00 04.43 6f  64 65|01.00 0f.4c 69 6e  |est...Code...Lin|
+00000050  65 4e 75 6d 62 65 72 54  61 62 6c 65|01.00 0a.53  |eNumberTable...S|
+00000060  6f 75 72 63 65 46 69 6c  65|01.00 09.54 65 73 74  |ourceFile...Test|
+00000070  2e 6a 61 76 61|00 21|00  07|00 02|00 00|00 00|00  |.java.!.........|
+00000080  01|00 01.00 05.00 06.00  01:00 09.00 00 00 1d.00  |................|
+00000090  01.00 01.00 00 00 05.2a  b7 00 01 b1.00 00.00 01: |.......*........|
+000000a0  00 0a.00 00 00 06.00 01 :00 00.00 01|00 01|00 0b. |................|
+000000b0  00 00 00 02.00 0c                                 |......|
+000000b6
+
+
+Magic: ca fe ba be
+Minor: 00 00
+Major: 00 3b
+CpCount: 00 0d (13) (13 - 1 = 12)
+Cp: [
+    1: {
+        tag: 0a (10, MethodRef)
+        class_index: 00 02 (2)
+        name_and_type_index: 00 03
+    }
+    2: {
+        tag: 07 (7, Class)
+        name_index: 00 04 (4) (java/lang/Object)
+    }
+    3: {
+        tag: 0c (12, NameAndType)
+        name_index: 00 05 (05)
+        descriptor_index: 00 06
+    }
+    4: {
+        tag: 01 (1, Utf8)
+        length: 00 10 (16)
+        string: 6a 61 76 61 2f 6c 61 6e 67 2f 4f 62 6a 65 63 74 (java/lang/Object)
+    }
+    5: {
+        tag: 01 (1, Utf8)
+        length: 00 06 (6)
+        string: 3c 69 6e 69 74 3e (<init>)
+    }
+    6: {
+        tag: 01 (1, Utf8)
+        length: 00 03 (3)
+        bytes: 28 29 56 (()V)
+    }
+    7: {
+        tag: 07 (7, Class)
+        name_index: 00 08 (8) (Test)
+    }
+    8: {
+        tag: 01 (1, Utf8)
+        length: 00 04 (4)
+        bytes: 54 65 73 74 (Test)
+    }
+    9: {
+        tag: 01 (1, Utf8)
+        length: 00 04 (4)
+        bytes: 43 6f 64 65 (Code)
+    }
+    10: {
+        tag: 01 (1, Utf8)
+        length: 00 0f (15)
+        bytes: 4c 69 6e 65 4e 75 6d 62 65 72 54 61 62 6c 65 (LineNumberTable)
+    }
+    11: {
+        tag: 01 (1, Utf8)
+        length: 00 0a (10)
+        bytes: 53 6f 75 72 63 65 46 69 6c 65 (SourceFile)
+    }
+    12: {
+        tag: 01 (1, Utf8)
+        length: 00 09 (9)
+        bytes: 54 65 73 74 2e 6a 61 76 61 (Test.java)
+    }
+]
+access_flags: 00 21
+this_class: 00 07 (Test)
+super_class: 00 02 (java/lang/Object)
+interfaces_count: 00 00
+interfaces: []
+fields_count: 00 00
+fields: []
+methods_count: 00 01
+methods: [
+    {
+        access_flags: 00 01
+        name_index: 00 05
+        descriptor_index: 00 06
+        attributes_count: 00 01
+        attributes: [
+            {
+                name_index: 00 09 (Code)
+                attribute_length: 00 00 00 1d (29)
+                max_stack: 00 01
+                max_locals: 00 01
+                code_length: 00 00 00 05
+                code: 2a b7 00 01 b1
+                exception_table_length: 00 00
+                exception_table: []
+                attributes_count: 00 01
+                attributes: [
+                    {
+                        attribute_name_index: 00 0a (LineNumberTable)
+                        attribute_length: 00 00 00 06
+                        line_number_table_length: 00 01
+                        line_number_table: [
+                            {
+                                start_pc: 00 00
+                                line_number: 00 01
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]
+attributes_count: 00 01
+attributes: [
+    {
+        attribute_name_index: 00 0b (SourceFile)
+        attribute_length: 00 00 00 02
+        sourcefile_index: 00 0c
+    }
+]

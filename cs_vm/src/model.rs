@@ -58,6 +58,7 @@ mod tests {
     use super::{LocalVariables, OperandStack};
 
     #[test]
+    #[ignore]
     fn operand_stack() {
         let mut stack = OperandStack::new();
 

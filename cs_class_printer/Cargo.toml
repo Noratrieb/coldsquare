@@ -1,8 +1,9 @@
 [package]
-name = "file-parser"
+name = "cs_class_printer"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cs_parser = { path = "../cs_parser" }
