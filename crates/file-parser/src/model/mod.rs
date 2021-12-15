@@ -30,7 +30,7 @@ pub struct ClassFile {
     pub minor_version: u2,
     /// The version of the class file (X.)
     pub major_version: u2,
-    /// `constant_pool_count` = Number of entries in the constant pool + 1
+    /// `constant_pool_count` = Number of entries in the constant pool + 1  
     /// The constant pool. Indexed from 1 to constant_pool_count - 1
     pub constant_pool: Vec<CpInfo>,
     /// Mask of `ClassAccessFlag` used to denote access permissions
@@ -227,9 +227,11 @@ pub enum AttributeInfoInner {
     BootstrapMethods {
         bootstrap_methods: Vec<BootstrapMethod>,
     },
+    /// Only on `ClassFile`, where there may be one at most. Specifies packages exported and opened by a module
+    Module(Box<Module>),
+
     // todo
     MethodParameters,
-    Module,
     ModulePackages,
     ModuleMainClass,
     NestHost,
@@ -439,6 +441,68 @@ pub struct BootstrapMethod {
     pub bootstrap_method_ref: FromPool<cp_info::MethodHandle>,
     /// Each argument is a cpool entry. The constants must be `String, Class, Integer, Long, Float, Double, MethodHandle, or MethodType`
     pub bootstrap_arguments: Vec<FromPool<CpInfoInner>>,
+}
+
+/// Used in `AttributeInfo::Module`
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct Module {
+    pub module_name_index: FromPool<cp_info::Utf8>,
+    /// The following flags exist
+    /// * 0x0020 (ACC_OPEN) - Indicates that this module is open.
+    /// * 0x1000 (ACC_SYNTHETIC) - Indicates that this module was not explicitly or implicitly declared.
+    /// * 0x8000 (ACC_MANDATED) - Indicates that this module was implicitly declared.
+    pub module_flags: u2,
+    /// The version of the module
+    pub module_version_index: FromPool<Option<cp_info::Utf8>>,
+    /// If the module is `java.base`, the Vec must be empty
+    pub requires: Vec<ModuleRequires>,
+    pub exports: Vec<ModuleExports>,
+    pub opens: Vec<ModuleOpens>,
+    pub uses_index: Vec<u2>,
+    pub provides: Vec<ModuleProvides>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ModuleRequires {
+    pub requires_index: FromPool<cp_info::Module>,
+    /// * 0x0020 (ACC_TRANSITIVE) - Indicates that any module which depends on the current module, implicitly declares a dependence on the module indicated by this entry.
+    /// * 0x0040 (ACC_STATIC_PHASE) - Indicates that this dependence is mandatory in the static phase, i.e., at compile time, but is optional in the dynamic phase, i.e., at run time.
+    /// * 0x1000 (ACC_SYNTHETIC) - Indicates that this dependence was not explicitly or implicitly declared in the source of the module declaration.
+    /// * 0x8000 (ACC_MANDATED) - Indicates that this dependence was implicitly declared in the source of the module declaration.
+    /// If the current module is not java.base, and the class file version number is 54.0 or above, then neither ACC_TRANSITIVE nor ACC_STATIC_PHASE may be set in requires_flags.
+    pub requires_flags: u2,
+    pub requires_version_index: FromPool<Option<cp_info::Utf8>>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ModuleExports {
+    pub exports_index: FromPool<cp_info::Package>,
+    /// * 0x1000 (ACC_SYNTHETIC) - Indicates that this export was not explicitly or implicitly declared in the source of the module declaration.
+    /// * 0x8000 (ACC_MANDATED) - Indicates that this export was implicitly declared in the source of the module declaration.
+    pub exports_flags: u2,
+    /// If there are no exports, the package is *unqualified*, allowing unrestricted access  
+    /// If there are exports, the package is *qualified*, only allowing the following modules can access it
+    pub exports_to_index: Vec<FromPool<cp_info::Module>>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ModuleOpens {
+    pub opens_index: FromPool<cp_info::Module>,
+    /// * 0x1000 (ACC_SYNTHETIC) - Indicates that this opening was not explicitly or implicitly declared in the source of the module declaration.
+    /// * 0x8000 (ACC_MANDATED) - Indicates that this opening was implicitly declared in the source of the module declaration.
+    pub opens_flags: u2,
+    /// If there are no exports, the package is *unqualified*, allowing unrestricted reflective access  
+    /// If there are exports, the package is *qualified*, only allowing the following modules can reflectively access it
+    pub opens_to_index: Vec<FromPool<cp_info::Module>>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+/// A service interface for which this module represents an implementation
+pub struct ModuleProvides {
+    /// Represents the interface
+    pub provides_index: FromPool<cp_info::Class>,
+    /// Represents the implementations, must be nonzero
+    pub provides_with_index: Vec<FromPool<cp_info::Class>>,
 }
 
 /////// Access Flags
