@@ -3,20 +3,28 @@
 version = 3
 
 [[package]]
-name = "class-struct"
-version = "0.1.0"
-
-[[package]]
-name = "file-info"
+name = "coldsquare"
 version = "0.1.0"
 dependencies = [
- "file-parser",
+ "cs_class_printer",
+ "cs_parser",
 ]
 
 [[package]]
-name = "file-parser"
+name = "cs_class_printer"
+version = "0.1.0"
+dependencies = [
+ "cs_parser",
+]
+
+[[package]]
+name = "cs_model"
 version = "0.1.0"
 
 [[package]]
-name = "machine"
+name = "cs_parser"
+version = "0.1.0"
+
+[[package]]
+name = "cs_vm"
 version = "0.1.0"
